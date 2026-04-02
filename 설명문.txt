@@ -1,0 +1,7 @@
+docker = 설정 파일 모아두는곳  mysql 컨테이너, 백엔드 컨테이너 등등
+docs = 설계 문서 모음
+
+
+npm run start:dev = 백서버 가동 그전에 cd backend    ==http://localhost:5000/api/test
+cd frontend 에 가서 npm run dev
+

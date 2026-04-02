@@ -1,0 +1,23 @@
+db  다이어그램
+┌─────────────────────┐
+|       User          |
+|---------------------|
+| id        (PK)      |
+| email     (Unique)   |
+| password            |
+| name                |
+| phone               |
+| role      (default) |
+| createdAt           |
+| updatedAt           |
+└─────────────────────┘
+
+필드	의미
+id		고유 사용자 식별자 (PK)
+email		로그인 및 유저 중복 체크용
+password	암호화된 비밀번호 저장
+name		사용자 이름
+phone	연락처
+role		권한 관리 (USER / ADMIN 등 확장)
+createdAt	생성 시각
+updatedAt	수정 시각

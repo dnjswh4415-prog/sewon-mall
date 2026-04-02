@@ -1,0 +1,451 @@
+//////////////////////////////////////////////////
+// PRISMA CLIENT 설정
+//////////////////////////////////////////////////
+
+generator client {
+  provider = "prisma-client-js" // Prisma에서 자동으로 TypeScript DB Client 생성
+}
+
+//////////////////////////////////////////////////
+// DATABASE 설정
+//////////////////////////////////////////////////
+
+datasource db {
+  provider = "mysql" // 데이터베이스 종류 (MySQL)
+  url      = env("DATABASE_URL") // .env 파일에 저장된 DB 연결 주소
+}
+
+//////////////////////////////////////////////////
+// USER
+// 쇼핑몰 사용자 계정
+//////////////////////////////////////////////////
+
+model User {
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  password String
+  name     String
+  phone    String
+  role     String @default("USER")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  cartItems    CartItem[]
+  orders       Order[]
+  wishlist     Wishlist[]
+  addresses    Address[]
+  reviews      Review[]
+  stockActions StockHistory[] @relation("StockHistoryActor")
+}
+
+//////////////////////////////////////////////////
+// CATEGORY
+// 상품 카테고리
+//////////////////////////////////////////////////
+
+model Category {
+  id       Int       @id @default(autoincrement()) // 카테고리 고유 ID
+  name     String // 카테고리 이름 (예: 전자제품)
+  parentId Int? // 부모 카테고리 ID (대분류 → 중분류 구조)
+  products Product[] // 해당 카테고리에 속한 상품 목록
+}
+
+//////////////////////////////////////////////////
+// PRODUCT
+// 쇼핑몰 상품
+//////////////////////////////////////////////////
+
+model Product {
+  id          Int      @id @default(autoincrement()) // 상품 고유 ID
+  name        String // 상품 이름
+  description String? // 상품 상세 설명
+  price       Int // 상품 기본 가격
+  stock       Int      @default(0) // 기본 재고 (옵션 없는 상품용)
+  imageUrl    String? // 대표 상품 이미지
+  createdAt   DateTime @default(now()) // 상품 등록 날짜
+
+  categoryId Int? // 카테고리 ID
+  Category   Category? @relation(fields: [categoryId], references: [id]) // 상품 카테고리 관계
+
+  cartItems  CartItem[] // 장바구니에 담긴 기록
+  orderItems OrderItem[] // 주문에 포함된 기록
+  wishlist   Wishlist[] // 찜 목록에 포함된 기록
+  reviews    Review[] // 상품 리뷰 목록
+  images     ProductImage[] // 상품 상세 이미지들
+  variants   ProductVariant[] // 상품 옵션 SKU 목록
+
+  options        ProductOption[] //  옵션
+  stockHistories StockHistory[] //  재고 로그
+}
+
+//////////////////////////////////////////////////
+// PRODUCT IMAGE
+// 상품 이미지 (여러장 지원)
+//////////////////////////////////////////////////
+
+model ProductImage {
+  id        Int      @id @default(autoincrement()) // 상품 이미지 ID
+  productId Int // 이미지가 속한 상품 ID
+  product   Product  @relation(fields: [productId], references: [id]) // 상품과 관계
+  imageUrl  String // 이미지 URL 주소
+  sortOrder Int      @default(0) // 이미지 노출 순서
+  isMain    Boolean  @default(false) // 대표 이미지 여부
+  createdAt DateTime @default(now()) // 이미지 등록 날짜
+
+  @@index([productId]) // 상품 기준 이미지 조회 성능 향상
+}
+
+//////////////////////////////////////////////////
+// PRODUCT OPTION
+// 상품 옵션 (예: Color / Size)
+//////////////////////////////////////////////////
+
+model ProductOption {
+  id        Int                  @id @default(autoincrement()) // 옵션 ID
+  productId Int // 옵션이 속한 상품 ID
+  product   Product              @relation(fields: [productId], references: [id]) // 상품과 관계
+  name      String // 옵션 이름 (예: Color, Size)
+  values    ProductOptionValue[] // 옵션에 포함된 값 목록
+}
+
+//////////////////////////////////////////////////
+// PRODUCT OPTION VALUE
+// 옵션 값 (예: Black / White / M / L)
+//////////////////////////////////////////////////
+
+model ProductOptionValue {
+  id             Int                    @id @default(autoincrement()) // 옵션 값 ID
+  optionId       Int // 옵션 ID
+  option         ProductOption          @relation(fields: [optionId], references: [id]) // 옵션과 관계
+  value          String // 옵션 값 (예: Black, White, M)
+  variantOptions ProductVariantOption[] // 추가
+
+  @@unique([optionId, value]) // 같은 옵션에 같은 값 중복 방지
+}
+
+//////////////////////////////////////////////////
+// PRODUCT VARIANT
+// SKU (옵션 조합 상품)
+//////////////////////////////////////////////////
+
+model ProductVariant {
+  id             Int                    @id @default(autoincrement()) // SKU 고유 ID
+  productId      Int // 해당 SKU가 속한 상품 ID
+  product        Product                @relation(fields: [productId], references: [id]) // 상품과 관계
+  sku            String                 @unique // SKU 코드 (상품 관리용 고유 코드)
+  price          Int? // 옵션 가격 (없으면 상품 기본 가격 사용)
+  stock          Int                    @default(0) // SKU 단위 재고
+  isActive       Boolean                @default(true) // 판매 여부
+  createdAt      DateTime               @default(now()) // SKU 생성 날짜
+  options        ProductVariantOption[] // 해당 SKU의 옵션 조합
+  orderItems     OrderItem[] // 주문 상품들
+  stockHistories StockHistory[] // 재고 로그
+  cartItems      CartItem[]
+}
+
+//////////////////////////////////////////////////
+// VARIANT OPTION
+// SKU에 연결된 옵션값
+//////////////////////////////////////////////////
+
+model ProductVariantOption {
+  id        Int                @id @default(autoincrement()) // SKU 옵션 관계 ID
+  variantId Int // SKU ID
+  variant   ProductVariant     @relation(fields: [variantId], references: [id]) // SKU 관계
+  valueId   Int // 옵션 값 ID
+  value     ProductOptionValue @relation(fields: [valueId], references: [id]) // 옵션 값 관계
+
+  @@unique([variantId, valueId]) // 같은 SKU에 동일 옵션 중복 방지
+}
+
+//////////////////////////////////////////////////
+// CART ITEM
+// 장바구니 상품
+//////////////////////////////////////////////////
+
+model CartItem {
+  id        Int     @id @default(autoincrement())
+  userId    Int
+  user      User    @relation(fields: [userId], references: [id])
+
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+
+  variantId Int?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+
+  quantity  Int
+
+  @@unique([userId, productId, variantId])
+}
+
+//////////////////////////////////////////////////
+// ORDER
+// 주문 정보
+//////////////////////////////////////////////////
+
+model Order {
+  id             Int         @id @default(autoincrement()) // 내부 주문 ID
+  orderNumber    String      @unique // 외부 노출 주문번호 (결제 시스템용)
+  clientOrderKey String?     @unique // 중복 주문 방지용 클라이언트 주문 키
+  userId         Int // 주문한 사용자 ID
+  user           User        @relation(fields: [userId], references: [id]) // 사용자 관계
+  totalPrice     Int // 총 주문 금액
+  status         OrderStatus @default(PENDING_PAYMENT) // 주문 상태
+  paymentKey     String?     @unique // Toss 결제 키
+  paidAt         DateTime? // 결제 완료 시간
+
+  deliveryCompany String? // 배송 정보 추가
+  trackingNumber  String?
+
+  addressId       Int
+  address         Address    @relation(fields: [addressId], references: [id])
+
+  createdAt   DateTime    @default(now()) // 주문 생성 시간
+
+  items    OrderItem[] // 주문 상품 목록
+  cancels  Cancel[] // 주문 취소 기록
+  returns  Return[] // 반품 기록
+  refunds  Refund[] // 환불 기록
+  payments PaymentLog[] // 결제 로그
+
+  stockHistories StockHistory[] // 재고 로그
+}
+
+//////////////////////////////////////////////////
+// ORDER ITEM
+// 주문 상품
+//////////////////////////////////////////////////
+
+model OrderItem {
+  id      Int   @id @default(autoincrement())
+  orderId Int
+  order   Order @relation(fields: [orderId], references: [id])
+
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+
+  variantId Int?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+
+  quantity Int
+  price    Int
+
+  reviews        Review[]
+  returns        Return[]
+  stockHistories StockHistory[]
+}
+
+//////////////////////////////////////////////////
+// PAYMENT LOG
+// 결제 로그 기록
+//////////////////////////////////////////////////
+
+model PaymentLog {
+  id           Int             @id @default(autoincrement()) // 결제 로그 ID
+  orderId      Int // 주문 ID
+  order        Order           @relation(fields: [orderId], references: [id]) // 주문 관계
+  provider     PaymentProvider @default(TOSS) // 결제사 (TOSS)
+  status       PaymentStatus   @default(REQUESTED) // 결제 상태
+  paymentKey   String?         @unique // 결제 키
+  amount       Int // 결제 금액
+  requestJson  Json? // 결제 요청 데이터
+  responseJson Json? // 결제 응답 데이터
+
+  failCode    String? // 실패 코드
+  failMessage String? // 실패 메시지
+  createdAt   DateTime @default(now()) // 로그 생성 시간
+}
+
+//////////////////////////////////////////////////
+// STOCK HISTORY
+// 재고 변동 기록
+//////////////////////////////////////////////////
+
+model StockHistory {
+  id          Int             @id @default(autoincrement())
+  productId   Int
+  product     Product         @relation(fields: [productId], references: [id])
+
+  variantId   Int?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+
+  orderId     Int?
+  order       Order?          @relation(fields: [orderId], references: [id])
+
+  orderItemId Int?
+  orderItem   OrderItem?      @relation(fields: [orderItemId], references: [id])
+
+  actorUserId Int?
+  actor       User?           @relation("StockHistoryActor", fields: [actorUserId], references: [id])
+
+  changeType  StockChangeType
+  quantity    Int
+  beforeStock Int
+  afterStock  Int
+  note        String?
+  createdAt   DateTime        @default(now())
+
+  @@index([productId, createdAt])
+  @@index([variantId, createdAt])
+  @@index([orderId, createdAt])
+}
+
+//////////////////////////////////////////////////
+// REVIEW
+// 상품 리뷰
+//////////////////////////////////////////////////
+
+model Review {
+  id          Int           @id @default(autoincrement()) // 리뷰 ID
+  rating      Int // 별점 (1~5)
+  comment     String? // 리뷰 내용
+  userId      Int // 리뷰 작성 사용자
+  user        User          @relation(fields: [userId], references: [id]) // 사용자 관계
+  productId   Int // 리뷰 대상 상품
+  product     Product       @relation(fields: [productId], references: [id]) // 상품 관계
+  orderItemId Int           @unique // 주문상품 기준 리뷰 (1개만 가능)
+  orderItem   OrderItem     @relation(fields: [orderItemId], references: [id]) // 주문상품 관계
+  images      ReviewImage[] // 리뷰 이미지
+  createdAt   DateTime      @default(now()) // 리뷰 생성 시간
+  updatedAt   DateTime      @updatedAt // 리뷰 수정 시간
+}
+
+//////////////////////////////////////////////////
+// REVIEW IMAGE
+// 리뷰 이미지
+//////////////////////////////////////////////////
+
+model ReviewImage {
+  id       Int    @id @default(autoincrement()) // 리뷰 이미지 ID
+  imageUrl String // 이미지 주소
+  reviewId Int // 리뷰 ID
+  review   Review @relation(fields: [reviewId], references: [id]) // 리뷰 관계
+}
+
+//////////////////////////////////////////////////
+// ADDRESS
+// 배송지
+//////////////////////////////////////////////////
+
+model Address {
+  id        Int     @id @default(autoincrement()) // 배송지 ID
+  userId    Int // 사용자 ID
+  user      User    @relation(fields: [userId], references: [id]) // 사용자 관계
+  recipient String // 수령인 이름
+  phone     String // 수령인 전화번호
+  zipcode   String // 우편번호
+  address1  String // 기본 주소
+  address2  String // 상세 주소
+  isDefault Boolean @default(false) // 기본 배송지 여부
+  orders    Order[]
+}
+
+//////////////////////////////////////////////////
+// WISHLIST
+// 찜 목록
+//////////////////////////////////////////////////
+
+model Wishlist {
+  id     Int  @id @default(autoincrement()) // 찜 ID
+  userId Int // 사용자 ID
+  user   User @relation(fields: [userId], references: [id]) // 사용자 관계
+
+  productId Int // 상품 ID
+  product   Product  @relation(fields: [productId], references: [id]) // 상품 관계
+  createdAt DateTime @default(now()) // 찜 등록 시간
+
+  @@unique([userId, productId]) // 동일 상품 중복 찜 방지
+}
+
+//////////////////////////////////////////////////
+// CANCEL
+// 주문 취소 기록
+//////////////////////////////////////////////////
+
+model Cancel {
+  id      Int   @id @default(autoincrement()) // 취소 기록 ID
+  orderId Int // 주문 ID
+  order   Order @relation(fields: [orderId], references: [id]) // 주문 관계
+
+  reason    String // 취소 사유
+  createdAt DateTime @default(now()) // 취소 생성 시간
+}
+
+//////////////////////////////////////////////////
+// RETURN
+// 반품 / 교환
+//////////////////////////////////////////////////
+
+model Return {
+  id          Int       @id @default(autoincrement()) // 반품 요청 ID
+  orderId     Int // 주문 ID
+  order       Order     @relation(fields: [orderId], references: [id]) // 주문 관계
+  orderItemId Int // 주문 상품 ID
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id]) // 주문 상품 관계
+
+  reason    String // 반품 사유
+  type      ReturnType // 반품 / 교환 타입
+  status    ReturnStatus @default(REQUESTED) // 반품 상태
+  createdAt DateTime     @default(now()) // 반품 요청 날짜
+}
+
+//////////////////////////////////////////////////
+// REFUND
+// 환불
+//////////////////////////////////////////////////
+
+model Refund {
+  id        Int      @id @default(autoincrement()) // 환불 ID
+  orderId   Int // 주문 ID
+  order     Order    @relation(fields: [orderId], references: [id]) // 주문 관계
+  amount    Int // 환불 금액
+  reason    String // 환불 사유
+  createdAt DateTime @default(now()) // 환불 날짜
+}
+
+//////////////////////////////////////////////////
+// ENUMS
+//////////////////////////////////////////////////
+
+enum OrderStatus {
+  PENDING_PAYMENT // 결제 대기
+  PAYMENT_COMPLETE // 결제 완료
+  SHIPPING // 배송중
+  DELIVERED // 배송 완료
+  CANCELLED // 주문 취소
+  RETURNED // 반품 완료
+  REFUNDED // 환불 완료
+}
+
+enum PaymentProvider {
+  TOSS // 토스 결제
+}
+
+enum PaymentStatus {
+  REQUESTED // 결제 요청
+  CONFIRMED // 결제 승인
+  FAILED // 결제 실패
+  CANCELLED // 결제 취소
+}
+
+enum StockChangeType {
+  ORDER_PAID // 결제 완료로 재고 감소
+  CANCEL_RESTORE // 주문 취소로 재고 복구
+  RETURN_RESTORE  // 반품으로 재고 복구
+  REFUND_RESTORE // 환불 재고 복구
+  MANUAL_ADJUST // 관리자 수동 재고 조정
+}
+
+enum ReturnType {
+  RETURN // 반품
+  EXCHANGE // 교환
+}
+
+enum ReturnStatus {
+  REQUESTED // 요청됨
+  APPROVED // 승인됨
+  REJECTED // 거절됨
+  COMPLETED // 처리 완료
+}
