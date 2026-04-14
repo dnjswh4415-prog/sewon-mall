@@ -1,52 +1,52 @@
-쇼핑몰 프로젝트 포트폴리오 문서 (Markdown 템플릿)
-🧾 프로젝트 개요
-📌 프로젝트명
+#쇼핑몰 프로젝트 포트폴리오
 
-쇼핑몰 웹 애플리케이션 (Shopping Mall Web App)
+## 1. 프로젝트 개요
 
-📌 프로젝트 설명
+### 프로젝트명
+쇼핑몰 웹 애플리케이션 (Shopping Mall Web Application)
 
-React 기반으로 구성된 쇼핑몰 웹 애플리케이션입니다.
-백엔드는 NestJS + MySQL(PRISMA) 기반으로 구성되었으며,
-JWT 인증 및 이메일 중복 체크, REST API 기반 API 연동,
-Responsive UI를 갖춘 로그인/회원가입/마이페이지 기능이 구현되었습니다.
+### 프로젝트 소개
+본 프로젝트는 사용자 친화적인 쇼핑몰 서비스를 구현하기 위해 개발한 웹 애플리케이션입니다.  
+프론트엔드는 Next.js, React, TypeScript를 기반으로 구성하였고, 백엔드는 NestJS와 MySQL, Prisma ORM을 활용하여 설계하였습니다.  
 
-🧩 기술 스택 (Tech Stack)
-🏗️ Frontend
-기술         설명
-React	    UI 구성
-Next.js	    서버 사이드/라우팅
-TypeScript	정적 타입
-TailwindCSS	CSS framework
+회원가입, 로그인, 마이페이지와 같은 사용자 기능을 중심으로 구현하였으며, JWT 기반 인증 방식을 적용해 사용자 정보를 안전하게 관리할 수 있도록 구성하였습니다. 또한 REST API 기반으로 프론트엔드와 백엔드를 연동하였고, Tailwind CSS를 활용하여 반응형 UI를 구현하였습니다.
 
-⚙️ Backend
-기술	    설명
-NestJS	    MVC 중심 서버 프레임워크
-Node.js	    JavaScript 런타임
-TypeScript	정적 타입
-Swagger	API 문서 자동 생성
+---
 
-🗄️ Database
-기술	    설명
-MySQL	    관계형 DB
-Prisma ORM	Type-Safe ORM
+## 2. 기술 스택
 
-🔐 인증/캐시
-기술	    설명
-JWT	Token   기반 인증
-Redis (예정)	Session / Data cache
+### Frontend
+- React: 사용자 인터페이스 구성
+- Next.js: 라우팅 및 프론트엔드 구조 설계
+- TypeScript: 정적 타입 기반 개발
+- Tailwind CSS: UI 스타일링 및 반응형 화면 구성
 
-🚀 배포/인프라 (예정)
-기술	    설명
-Docker	    컨테이너 환경
-AWS	        클라우드 호스팅
-Nginx	    Reverse Proxy
+### Backend
+- NestJS: 구조적인 서버 애플리케이션 개발
+- Node.js: 서버 실행 환경
+- TypeScript: 유지보수성과 안정성을 고려한 개발
+- Swagger: API 문서 자동화
 
-🧠 요구사항 정리
+### Database
+- MySQL: 관계형 데이터베이스
+- Prisma ORM: 타입 안정성을 갖춘 ORM
 
-✔ 이메일/비밀번호 기반 회원가입
-✔ 로그인 후 JWT 발급
-✔ Protected API 기반 내 정보 페이지
-✔ 이메일 중복 체크 API
-✔ TailwindCSS 기반 UI
-✔ React “client” 방식 UI 컴포넌트
+### 인증 및 확장 계획
+- JWT: 토큰 기반 인증 처리
+- Redis: 세션 관리 및 캐시 처리 예정
+
+### 배포 및 인프라 계획
+- Docker: 컨테이너 기반 실행 환경 구성 예정
+- AWS: 클라우드 서버 배포 예정
+- Nginx: 리버스 프록시 및 서버 운영 예정
+
+---
+
+## 3. 주요 기능
+
+- 이메일과 비밀번호를 이용한 회원가입 기능
+- 로그인 시 JWT 발급 및 인증 처리
+- 인증된 사용자만 접근 가능한 마이페이지 기능
+- 이메일 중복 확인 API 제공
+- Tailwind CSS 기반의 반응형 UI 구현
+- React Client Component 방식의 사용자 화면 구성
