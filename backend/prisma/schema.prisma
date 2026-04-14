@@ -49,6 +49,9 @@ model Category {
   name     String // 카테고리 이름 (예: 전자제품)
   parentId Int? // 부모 카테고리 ID (대분류 → 중분류 구조)
   products Product[] // 해당 카테고리에 속한 상품 목록
+
+  @@index([parentId])
+  @@index([name])
 }
 
 //////////////////////////////////////////////////
@@ -77,6 +80,11 @@ model Product {
 
   options        ProductOption[] //  옵션
   stockHistories StockHistory[] //  재고 로그
+
+  @@index([createdAt])
+  @@index([categoryId, createdAt])
+  @@index([stock])
+  @@index([name])
 }
 
 //////////////////////////////////////////////////
@@ -142,6 +150,9 @@ model ProductVariant {
   orderItems     OrderItem[] // 주문 상품들
   stockHistories StockHistory[] // 재고 로그
   cartItems      CartItem[]
+
+  @@index([productId, isActive])
+  @@index([stock])
 }
 
 //////////////////////////////////////////////////
@@ -211,6 +222,11 @@ model Order {
   payments PaymentLog[] // 결제 로그
 
   stockHistories StockHistory[] // 재고 로그
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@index([addressId])
 }
 
 //////////////////////////////////////////////////
@@ -235,6 +251,10 @@ model OrderItem {
   reviews        Review[]
   returns        Return[]
   stockHistories StockHistory[]
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([variantId])
 }
 
 //////////////////////////////////////////////////
@@ -256,6 +276,9 @@ model PaymentLog {
   failCode    String? // 실패 코드
   failMessage String? // 실패 메시지
   createdAt   DateTime @default(now()) // 로그 생성 시간
+
+  @@index([orderId, createdAt])
+  @@index([status, createdAt])
 }
 
 //////////////////////////////////////////////////
@@ -340,6 +363,8 @@ model Address {
   address2  String // 상세 주소
   isDefault Boolean @default(false) // 기본 배송지 여부
   orders    Order[]
+
+   @@index([userId, isDefault])
 }
 
 //////////////////////////////////////////////////

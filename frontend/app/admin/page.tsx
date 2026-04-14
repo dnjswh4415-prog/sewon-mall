@@ -7,6 +7,7 @@ import {
   getAdminOrders,
   getAdminStockSummary,
 } from "@/src/api/admin";
+import PageTopActions from "@/src/components/PageTopActions";
 
 const statusLabelMap: Record<string, string> = {
   PENDING_PAYMENT: "결제대기",
@@ -136,6 +137,7 @@ export default function AdminPage() {
           >
             재고 관리
           </Link>
+          <PageTopActions backFallbackHref="/" />
         </div>
       </div>
 

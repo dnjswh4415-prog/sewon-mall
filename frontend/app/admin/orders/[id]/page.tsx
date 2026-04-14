@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { getAdminOrderDetail } from "@/src/api/admin";
+import PageTopActions from "@/src/components/PageTopActions";
 
 const statusLabelMap: Record<string, string> = {
   PENDING_PAYMENT: "결제대기",
@@ -122,6 +123,7 @@ export default function AdminOrderDetailPage() {
         >
           주문 관리로 돌아가기
         </Link>
+        <PageTopActions backFallbackHref="/admin/orders" />
       </div>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-4">

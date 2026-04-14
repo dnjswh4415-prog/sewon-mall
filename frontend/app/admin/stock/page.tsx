@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { adjustStock, getStockHistory, getStockProducts } from "@/src/api/stock";
+import PageTopActions from "@/src/components/PageTopActions";
 
 type VariantItem = {
   id: number;
@@ -213,6 +214,7 @@ export default function AdminStockPage() {
           >
             대시보드
           </Link>
+          <PageTopActions backFallbackHref="/admin" />
           <Link
             href="/admin/orders"
             className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium"

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { loginUser } from "@/src/api/auth";
+import PageTopActions from "@/src/components/PageTopActions";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -47,13 +48,15 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#f7f7f7]">
       <div className="max-w-7xl mx-auto px-4">
-        <header className="h-24 flex items-center">
+        <header className="h-24 flex items-center justify-between gap-4">
           <Link
             href="/"
             className="text-[34px] font-extrabold tracking-[-0.03em] text-black"
           >
             sewon-mall
           </Link>
+
+          <PageTopActions backFallbackHref="/" />
         </header>
 
         <div className="flex justify-center py-10">

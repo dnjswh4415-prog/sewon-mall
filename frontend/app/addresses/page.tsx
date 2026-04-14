@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getAddresses } from "@/src/api/address";
+import PageTopActions from "@/src/components/PageTopActions";
 
 export default function AddressesPage() {
   const [addresses, setAddresses] = useState<any[]>([]);
@@ -36,6 +37,7 @@ export default function AddressesPage() {
     <div className="min-h-screen bg-[#f7f7f7]">
       <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
+          <PageTopActions backFallbackHref="/" />
           <h1 className="text-2xl font-bold">배송지 관리</h1>
 
           <div className="flex gap-3">

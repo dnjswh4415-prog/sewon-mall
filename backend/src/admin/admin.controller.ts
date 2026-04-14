@@ -5,6 +5,7 @@ import {
   Param,
   ParseIntPipe,
   Patch,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
@@ -22,13 +23,18 @@ export class AdminController {
   }
 
   @Get('products')
-  getProducts() {
-    return this.adminService.getProducts();
+  getProducts(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.getProducts(query);
+  }
+
+  @Get('products/:id')
+  getProductDetail(@Param('id', ParseIntPipe) id: number) {
+    return this.adminService.getProductDetail(id);
   }
 
   @Get('orders')
-  getOrders() {
-    return this.adminService.getOrders();
+  getOrders(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.getOrders(query);
   }
 
   @Get('orders/:id')

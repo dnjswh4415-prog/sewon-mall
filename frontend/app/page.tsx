@@ -16,6 +16,8 @@ import { fetchProducts } from "@/src/api/products";
 import { fetchCategories } from "@/src/api/category";
 import api from "@/src/api/axios";
 import StarRating from "@/src/components/StarRating";
+import { translateText } from "@/src/api/translate";
+import { useLanguage } from "@/src/contexts/LanguageContext";
 
 type SortType =
   | "latest"
@@ -25,9 +27,121 @@ type SortType =
   | "salesDesc";
 
 const API_BASE_URL = "http://localhost:5000";
+const TRANSLATION_CACHE_KEY = "sewon_translation_cache_v1";
+
+const uiText = {
+  ko: {
+    favorite: "즐겨찾기",
+    login: "로그인",
+    signup: "회원가입",
+    findIdPw: "ID/PW 찾기",
+    wishlist: "찜목록",
+    admin: "관리자페이지",
+    logout: "로그아웃",
+    inquiry: "1:1문의",
+    support: "고객센터",
+    cart: "장바구니",
+    orders: "주문/배송",
+    mypage: "마이페이지",
+    all: "전체보기",
+    category: "카테고리",
+    close: "닫기",
+    openCategory: "카테고리 열기",
+    selectedCategory: "현재 선택 카테고리",
+    searchKeyword: "검색어",
+    latest: "최신순",
+    priceAsc: "가격 낮은순",
+    priceDesc: "가격 높은순",
+    salesDesc: "구매순",
+    ratingDesc: "평점순",
+    loadingProducts: "상품을 불러오는 중입니다...",
+    emptyProducts: "조건에 맞는 상품이 없습니다.",
+    stock: "재고",
+    sales: "판매",
+    searchPlaceholder: "인기검색어순위",
+    allProducts: "전체 상품",
+    soldOut: "SOLD OUT",
+    languageButton: "日本語",
+    languageLoading: "번역 중...",
+    pageLoading: "페이지를 준비하는 중입니다...",
+    translateFailed: "일본어 번역 전환에 실패했습니다.",
+    loginRequired: "로그인이 필요합니다.",
+    cartLoginRequired: "로그인 후에 장바구니에 추가 가능하십니다.",
+    ordersLoginRequired: "로그인 후에 주문/배송 조회가 가능합니다.",
+    favoriteHint: "즐겨찾기는 Ctrl + D를 누르면 추가할 수 있습니다.",
+  },
+  ja: {
+    favorite: "お気に入り",
+    login: "ログイン",
+    signup: "会員登録",
+    findIdPw: "ID/PW検索",
+    wishlist: "お気に入り一覧",
+    admin: "管理者ページ",
+    logout: "ログアウト",
+    inquiry: "1:1お問い合わせ",
+    support: "カスタマーセンター",
+    cart: "カート",
+    orders: "注文/配送",
+    mypage: "マイページ",
+    all: "すべて",
+    category: "カテゴリ",
+    close: "閉じる",
+    openCategory: "カテゴリを開く",
+    selectedCategory: "選択中のカテゴリ",
+    searchKeyword: "検索語",
+    latest: "新着順",
+    priceAsc: "価格の安い順",
+    priceDesc: "価格の高い順",
+    salesDesc: "人気順",
+    ratingDesc: "評価順",
+    loadingProducts: "商品を読み込み中です...",
+    emptyProducts: "条件に合う商品がありません。",
+    stock: "在庫",
+    sales: "販売",
+    searchPlaceholder: "人気検索語ランキング",
+    allProducts: "全商品",
+    soldOut: "SOLD OUT",
+    languageButton: "한국어",
+    languageLoading: "翻訳中...",
+    pageLoading: "ページを準備中です...",
+    translateFailed: "日本語への切り替えに失敗しました。",
+    loginRequired: "ログインが必要です。",
+    cartLoginRequired: "ログイン後にカートへ追加できます。",
+    ordersLoginRequired: "ログイン後に注文/配送照会が可能です。",
+    favoriteHint: "お気に入りは Ctrl + D で追加できます。",
+  },
+} as const;
+
+type TranslationCache = Record<string, string>;
+
+function getTranslationCache(): TranslationCache {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const raw = sessionStorage.getItem(TRANSLATION_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function setTranslationCache(cache: TranslationCache) {
+  if (typeof window === "undefined") return;
+
+  try {
+    sessionStorage.setItem(TRANSLATION_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // ignore
+  }
+}
+
+function makeTranslationKey(direction: "koToJa" | "jaToKo", text: string) {
+  return `${direction}::${text.trim()}`;
+}
 
 export default function HomePage() {
   const router = useRouter();
+  const { language, toggleLanguage, mounted } = useLanguage();
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -43,14 +157,40 @@ export default function HomePage() {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [showCategoryPanel, setShowCategoryPanel] = useState(true);
 
-  const getStoredToken = () => {
-    if (typeof window === "undefined") return null;
+  const [pageTranslating, setPageTranslating] = useState(false);
+  const [translatedNames, setTranslatedNames] = useState<Record<number, string>>(
+    {}
+  );
+  const [translatedCategoryNames, setTranslatedCategoryNames] = useState<
+    Record<number, string>
+  >({});
 
-    return (
-      localStorage.getItem("token") ||
-      localStorage.getItem("accessToken") ||
-      localStorage.getItem("access_token")
-    );
+  const t = uiText[language];
+
+  const translateWithCache = async (
+    text: string,
+    direction: "koToJa" | "jaToKo" = "koToJa"
+  ) => {
+    const trimmed = String(text ?? "").trim();
+    if (!trimmed) return "";
+
+    const cacheKey = makeTranslationKey(direction, trimmed);
+    const cache = getTranslationCache();
+
+    if (cache[cacheKey]) {
+      return cache[cacheKey];
+    }
+
+    const result = await translateText({
+      text: trimmed,
+      direction,
+    });
+
+    const translated = result?.translatedText || trimmed;
+    cache[cacheKey] = translated;
+    setTranslationCache(cache);
+
+    return translated;
   };
 
   const normalizeImageUrl = (url?: string | null) => {
@@ -89,51 +229,51 @@ export default function HomePage() {
     return normalizeImageUrl(raw);
   };
 
-    useEffect(() => {
-      const loadUserData = async () => {
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  useEffect(() => {
+    const loadUserData = async () => {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-        if (!token) {
-          setUser(null);
+      if (!token) {
+        setUser(null);
+        setWishlistIds([]);
+        setCartCount(0);
+        return;
+      }
+
+      try {
+        const profile = await getProfile();
+        setUser(profile);
+
+        try {
+          const wishlist = await getWishlist();
+          const ids = Array.isArray(wishlist)
+            ? wishlist.map((item: any) => item.productId)
+            : [];
+          setWishlistIds(ids);
+        } catch (e) {
+          console.error("찜목록 로딩 실패:", e);
           setWishlistIds([]);
-          setCartCount(0);
-          return;
         }
 
         try {
-          const profile = await getProfile();
-          setUser(profile);
-
-          try {
-            const wishlist = await getWishlist();
-            const ids = Array.isArray(wishlist)
-              ? wishlist.map((item: any) => item.productId)
-              : [];
-            setWishlistIds(ids);
-          } catch (e) {
-            console.error("찜목록 로딩 실패:", e);
-            setWishlistIds([]);
-          }
-
-          try {
-            const cartRes = await api.get("/api/cart");
-            setCartCount(Array.isArray(cartRes.data) ? cartRes.data.length : 0);
-          } catch (e) {
-            console.error("장바구니 수량 로딩 실패:", e);
-            setCartCount(0);
-          }
-        } catch (err: any) {
-          console.error("프로필 조회 실패:", err);
-          localStorage.removeItem("token");
-          setUser(null);
-          setWishlistIds([]);
+          const cartRes = await api.get("/api/cart");
+          setCartCount(Array.isArray(cartRes.data) ? cartRes.data.length : 0);
+        } catch (e) {
+          console.error("장바구니 수량 로딩 실패:", e);
           setCartCount(0);
         }
-      };
+      } catch (err: any) {
+        console.error("프로필 조회 실패:", err);
+        localStorage.removeItem("token");
+        setUser(null);
+        setWishlistIds([]);
+        setCartCount(0);
+      }
+    };
 
-      loadUserData();
-    }, []);
+    loadUserData();
+  }, []);
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -217,6 +357,122 @@ export default function HomePage() {
     }
   }, [sortedProducts, page]);
 
+  const translateCategoriesToJapanese = async (categoryList: any[]) => {
+    const untranslatedCategories = categoryList.filter(
+      (cat) => !translatedCategoryNames[cat.id]
+    );
+
+    for (const cat of untranslatedCategories) {
+      try {
+        const translated = await translateWithCache(cat.name, "koToJa");
+
+        setTranslatedCategoryNames((prev) => ({
+          ...prev,
+          [cat.id]: translated || cat.name,
+        }));
+      } catch (error) {
+        console.error("카테고리 번역 실패:", error);
+      }
+    }
+  };
+
+  const translateCurrentProductsToJapanese = async (productList: any[]) => {
+    const untranslatedProducts = productList.filter(
+      (product) => !translatedNames[product.id]
+    );
+
+    for (const product of untranslatedProducts) {
+      try {
+        const translated = await translateWithCache(product.name, "koToJa");
+
+        setTranslatedNames((prev) => ({
+          ...prev,
+          [product.id]: translated || product.name,
+        }));
+      } catch (error) {
+        console.error("상품명 번역 실패:", error);
+      }
+    }
+  };
+
+  const restoreCachedTranslations = (categoryList: any[], productList: any[]) => {
+    const cache = getTranslationCache();
+
+    const restoredCategories: Record<number, string> = {};
+    const restoredProducts: Record<number, string> = {};
+
+    for (const cat of categoryList) {
+      const key = makeTranslationKey("koToJa", String(cat.name ?? ""));
+      if (cache[key]) {
+        restoredCategories[cat.id] = cache[key];
+      }
+    }
+
+    for (const product of productList) {
+      const key = makeTranslationKey("koToJa", String(product.name ?? ""));
+      if (cache[key]) {
+        restoredProducts[product.id] = cache[key];
+      }
+    }
+
+    if (Object.keys(restoredCategories).length > 0) {
+      setTranslatedCategoryNames((prev) => ({
+        ...prev,
+        ...restoredCategories,
+      }));
+    }
+
+    if (Object.keys(restoredProducts).length > 0) {
+      setTranslatedNames((prev) => ({
+        ...prev,
+        ...restoredProducts,
+      }));
+    }
+  };
+
+  useEffect(() => {
+    if (!mounted) return;
+    restoreCachedTranslations(categories, pagedProducts);
+  }, [mounted, categories, pagedProducts]);
+
+  const handleToggleLanguage = async () => {
+    if (language === "ja") {
+      toggleLanguage();
+      return;
+    }
+
+    try {
+      setPageTranslating(true);
+      restoreCachedTranslations(categories, pagedProducts);
+      await translateCategoriesToJapanese(categories);
+      await translateCurrentProductsToJapanese(pagedProducts);
+      toggleLanguage();
+    } catch (error) {
+      console.error("페이지 일본어 전환 실패:", error);
+      alert(t.translateFailed);
+    } finally {
+      setPageTranslating(false);
+    }
+  };
+
+  useEffect(() => {
+    const preloadJapaneseData = async () => {
+      if (language !== "ja") return;
+      if (categories.length === 0 && pagedProducts.length === 0) return;
+
+      try {
+        setPageTranslating(true);
+        restoreCachedTranslations(categories, pagedProducts);
+        await translateCategoriesToJapanese(categories);
+        await translateCurrentProductsToJapanese(pagedProducts);
+      } finally {
+        setPageTranslating(false);
+      }
+    };
+
+    preloadJapaneseData();
+  }, [language, categories, pagedProducts]);
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("accessToken");
@@ -230,7 +486,7 @@ export default function HomePage() {
 
   const handleToggleWishlist = async (productId: number) => {
     if (!user) {
-      alert("로그인이 필요합니다.");
+      alert(t.loginRequired);
       router.push("/login");
       return;
     }
@@ -268,7 +524,7 @@ export default function HomePage() {
 
   const handleCartClick = () => {
     if (!user) {
-      alert("로그인 후에 장바구니에 추가 가능하십니다.");
+      alert(t.cartLoginRequired);
       router.push("/login");
       return;
     }
@@ -278,7 +534,7 @@ export default function HomePage() {
 
   const handleOrdersClick = () => {
     if (!user) {
-      alert("로그인 후에 주문/배송 조회가 가능합니다.");
+      alert(t.ordersLoginRequired);
       router.push("/login");
       return;
     }
@@ -287,7 +543,22 @@ export default function HomePage() {
   };
 
   const selectedCategoryName =
-    categories.find((cat) => cat.id === categoryId)?.name || "전체 상품";
+    categories.find((cat) => cat.id === categoryId)?.name || uiText.ko.allProducts;
+
+  const translatedSelectedCategoryName =
+    categoryId && translatedCategoryNames[categoryId]
+      ? translatedCategoryNames[categoryId]
+      : language === "ja"
+      ? uiText.ja.allProducts
+      : selectedCategoryName;
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-[#f7f7f7] flex items-center justify-center text-gray-500">
+        {uiText.ko.pageLoading}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f7f7f7] text-gray-900">
@@ -295,13 +566,11 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto h-10 px-4 flex items-center justify-between text-sm text-gray-600">
           <div className="flex items-center gap-5">
             <button
-              onClick={() =>
-                alert("즐겨찾기는 Ctrl + D를 누르면 추가할 수 있습니다.")
-              }
+              onClick={() => alert(t.favoriteHint)}
               className="flex items-center gap-1 hover:text-black"
             >
               <Star size={14} />
-              즐겨찾기
+              {t.favorite}
             </button>
 
             {!user ? (
@@ -310,19 +579,19 @@ export default function HomePage() {
                   onClick={() => router.push("/login")}
                   className="hover:text-black"
                 >
-                  로그인
+                  {t.login}
                 </button>
                 <button
                   onClick={() => router.push("/signup")}
                   className="hover:text-black"
                 >
-                  회원가입
+                  {t.signup}
                 </button>
                 <button
                   onClick={() => router.push("/find-email")}
                   className="hover:text-black"
                 >
-                  ID/PW 찾기
+                  {t.findIdPw}
                 </button>
               </>
             ) : (
@@ -331,7 +600,7 @@ export default function HomePage() {
                   onClick={() => router.push("/wishlist")}
                   className="hover:text-black"
                 >
-                  찜목록
+                  {t.wishlist}
                 </button>
 
                 {user.role === "ADMIN" && (
@@ -339,7 +608,7 @@ export default function HomePage() {
                     onClick={() => router.push("/admin")}
                     className="text-blue-600 hover:text-blue-800 font-semibold"
                   >
-                    관리자페이지
+                    {t.admin}
                   </button>
                 )}
 
@@ -347,15 +616,22 @@ export default function HomePage() {
                   onClick={handleLogout}
                   className="text-red-500 hover:text-red-700"
                 >
-                  로그아웃
+                  {t.logout}
                 </button>
               </>
             )}
           </div>
 
           <div className="flex items-center gap-5">
-            <button className="hover:text-black">1:1문의</button>
-            <button className="hover:text-black">고객센터</button>
+            <button className="hover:text-black">{t.inquiry}</button>
+            <button className="hover:text-black">{t.support}</button>
+            <button
+              onClick={handleToggleLanguage}
+              disabled={pageTranslating}
+              className="hover:text-black font-semibold disabled:opacity-50"
+            >
+              {pageTranslating ? t.languageLoading : t.languageButton}
+            </button>
           </div>
         </div>
       </div>
@@ -375,7 +651,7 @@ export default function HomePage() {
             <div className="w-full max-w-[470px] relative">
               <input
                 type="text"
-                placeholder="인기검색어순위"
+                placeholder={t.searchPlaceholder}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -405,7 +681,7 @@ export default function HomePage() {
                   </span>
                 )}
               </div>
-              <span className="mt-2 text-[14px]">장바구니</span>
+              <span className="mt-2 text-[14px]">{t.cart}</span>
             </button>
 
             <button
@@ -413,7 +689,7 @@ export default function HomePage() {
               className="flex flex-col items-center text-black hover:opacity-70"
             >
               <Truck size={34} strokeWidth={1.8} />
-              <span className="mt-2 text-[14px]">주문/배송</span>
+              <span className="mt-2 text-[14px]">{t.orders}</span>
             </button>
 
             <button
@@ -421,7 +697,7 @@ export default function HomePage() {
               className="flex flex-col items-center text-black hover:opacity-70"
             >
               <User size={34} strokeWidth={1.8} />
-              <span className="mt-2 text-[14px]">마이페이지</span>
+              <span className="mt-2 text-[14px]">{t.mypage}</span>
             </button>
           </div>
         </div>
@@ -442,7 +718,7 @@ export default function HomePage() {
                 : "bg-gray-100 hover:bg-gray-200"
             }`}
           >
-            전체보기
+            {t.all}
           </button>
 
           {categories.map((cat) => (
@@ -455,7 +731,9 @@ export default function HomePage() {
                   : "bg-gray-100 hover:bg-gray-200"
               }`}
             >
-              {cat.name}
+              {language === "ja"
+                ? translatedCategoryNames[cat.id] || cat.name
+                : cat.name}
             </button>
           ))}
         </div>
@@ -467,12 +745,12 @@ export default function HomePage() {
             <aside className="hidden md:block w-64 shrink-0">
               <div className="bg-white rounded-2xl border border-gray-200 p-4 sticky top-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold">카테고리</h3>
+                  <h3 className="text-lg font-bold">{t.category}</h3>
                   <button
                     onClick={() => setShowCategoryPanel(false)}
                     className="text-xs text-gray-500 hover:text-black"
                   >
-                    닫기
+                    {t.close}
                   </button>
                 </div>
 
@@ -485,7 +763,7 @@ export default function HomePage() {
                         : "bg-gray-50 hover:bg-gray-100 border border-gray-200"
                     }`}
                   >
-                    전체
+                    {t.all}
                   </button>
 
                   {categories.map((cat) => (
@@ -498,7 +776,9 @@ export default function HomePage() {
                           : "bg-gray-50 hover:bg-gray-100 border border-gray-200"
                       }`}
                     >
-                      {cat.name}
+                      {language === "ja"
+                        ? translatedCategoryNames[cat.id] || cat.name
+                        : cat.name}
                     </button>
                   ))}
                 </div>
@@ -513,7 +793,7 @@ export default function HomePage() {
                   onClick={() => setShowCategoryPanel(true)}
                   className="px-4 py-2 bg-white border border-gray-300 rounded-xl hover:bg-gray-50"
                 >
-                  카테고리 열기
+                  {t.openCategory}
                 </button>
               </div>
             )}
@@ -521,11 +801,16 @@ export default function HomePage() {
             <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-6">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
-                  <p className="text-sm text-gray-500">현재 선택 카테고리</p>
-                  <h3 className="text-2xl font-bold">{selectedCategoryName}</h3>
+                  <p className="text-sm text-gray-500">{t.selectedCategory}</p>
+                  <h3 className="text-2xl font-bold">
+                    {language === "ja"
+                      ? translatedSelectedCategoryName
+                      : selectedCategoryName}
+                  </h3>
                   {search && (
                     <p className="text-sm text-gray-500 mt-1">
-                      검색어: <span className="font-medium">{search}</span>
+                      {t.searchKeyword}:{" "}
+                      <span className="font-medium">{search}</span>
                     </p>
                   )}
                 </div>
@@ -535,28 +820,39 @@ export default function HomePage() {
                   onChange={(e) => setSortBy(e.target.value as SortType)}
                   className="border border-gray-300 rounded-xl px-4 py-3 bg-white"
                 >
-                  <option value="latest">최신순</option>
-                  <option value="priceAsc">가격 낮은순</option>
-                  <option value="priceDesc">가격 높은순</option>
-                  <option value="salesDesc">구매순</option>
-                  <option value="ratingDesc">평점순</option>
+                  <option value="latest">{t.latest}</option>
+                  <option value="priceAsc">{t.priceAsc}</option>
+                  <option value="priceDesc">{t.priceDesc}</option>
+                  <option value="salesDesc">{t.salesDesc}</option>
+                  <option value="ratingDesc">{t.ratingDesc}</option>
                 </select>
               </div>
             </div>
 
             {loadingProducts ? (
               <div className="bg-white border border-gray-200 rounded-2xl p-10 text-center text-gray-500">
-                상품을 불러오는 중입니다...
+                {t.loadingProducts}
               </div>
             ) : pagedProducts.length === 0 ? (
               <div className="bg-white border border-gray-200 rounded-2xl p-10 text-center text-gray-500">
-                조건에 맞는 상품이 없습니다.
+                {t.emptyProducts}
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
                 {pagedProducts.map((product) => {
                   const isSoldOut = Number(product.stock) === 0;
                   const thumbnail = getThumbnailSrc(product);
+                  const translatedName =
+                    language === "ja"
+                      ? translatedNames[product.id] || product.name
+                      : product.name;
+
+                  const productCategoryName =
+                    language === "ja"
+                      ? translatedCategoryNames[product.Category?.id] ||
+                        product.Category?.name ||
+                        translatedSelectedCategoryName
+                      : product.Category?.name || selectedCategoryName;
 
                   return (
                     <div
@@ -567,7 +863,7 @@ export default function HomePage() {
                       {isSoldOut && (
                         <div className="absolute inset-0 bg-black/55 flex items-center justify-center z-20">
                           <span className="text-white text-lg font-bold">
-                            SOLD OUT
+                            {t.soldOut}
                           </span>
                         </div>
                       )}
@@ -606,10 +902,10 @@ export default function HomePage() {
                       <div className="p-4">
                         <div className="mb-2">
                           <p className="text-xs text-gray-500 mb-1">
-                            {product.Category?.name || selectedCategoryName}
+                            {productCategoryName}
                           </p>
                           <h5 className="font-semibold text-sm leading-5 line-clamp-2 min-h-[40px]">
-                            {product.name}
+                            {translatedName}
                           </h5>
                         </div>
 
@@ -626,8 +922,12 @@ export default function HomePage() {
                           </p>
 
                           <div className="flex items-center justify-between text-xs text-gray-500">
-                            <span>재고 {product.stock ?? 0}</span>
-                            <span>판매 {product.salesCount || 0}</span>
+                            <span>
+                              {t.stock} {product.stock ?? 0}
+                            </span>
+                            <span>
+                              {t.sales} {product.salesCount || 0}
+                            </span>
                           </div>
                         </div>
                       </div>

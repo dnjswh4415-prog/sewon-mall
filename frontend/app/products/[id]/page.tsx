@@ -8,6 +8,8 @@ import { getProfile } from "@/src/api/auth";
 import { getWishlist, toggleWishlist } from "@/src/api/wishlist";
 import api from "@/src/api/axios";
 import StarRating from "@/src/components/StarRating";
+import { translateText } from "@/src/api/translate";
+import { useLanguage } from "@/src/contexts/LanguageContext";
 
 const API_BASE_URL = "http://localhost:5000";
 
@@ -86,6 +88,75 @@ type ProductDetail = {
   reviews?: Review[];
 };
 
+const detailText = {
+  ko: {
+    back: "뒤로가기",
+    home: "홈으로",
+    languageButton: "日本語",
+    languageLoading: "번역 중...",
+    pageLoading: "페이지를 준비하는 중입니다...",
+    loading: "상품 정보를 불러오는 중입니다...",
+    notFound: "상품을 찾을 수 없습니다.",
+    category: "카테고리",
+    uncategorized: "미분류",
+    reviewUnit: "개 리뷰",
+    noDescription: "상품 설명이 없습니다.",
+    selectedOption: "선택 옵션",
+    selectOption: "옵션을 선택해주세요.",
+    stock: "재고",
+    stockRemain: "개 남음",
+    soldOut: "품절",
+    quantity: "수량",
+    totalPrice: "총 금액",
+    addToCart: "장바구니 담기",
+    buyNow: "바로 구매",
+    reviews: "리뷰",
+    noReview: "아직 리뷰가 없습니다.",
+    noReviewContent: "리뷰 내용이 없습니다.",
+    noImage: "이미지 없음",
+    anonymous: "익명",
+    loginRequired: "로그인이 필요합니다.",
+    cartLoginRequired: "로그인 후에 장바구니에 추가 가능하십니다.",
+    wishlistFailed: "찜 처리에 실패했습니다.",
+    addCartSuccess: "장바구니에 담았습니다.",
+    addCartFailed: "장바구니 담기에 실패했습니다.",
+    translateFailed: "일본어 전환에 실패했습니다.",
+  },
+  ja: {
+    back: "戻る",
+    home: "ホームへ",
+    languageButton: "한국어",
+    languageLoading: "翻訳中...",
+    pageLoading: "ページを準備中です...",
+    loading: "商品情報を読み込み中です...",
+    notFound: "商品が見つかりません。",
+    category: "カテゴリ",
+    uncategorized: "未分類",
+    reviewUnit: "件のレビュー",
+    noDescription: "商品説明がありません。",
+    selectedOption: "選択オプション",
+    selectOption: "オプションを選択してください。",
+    stock: "在庫",
+    stockRemain: "個残り",
+    soldOut: "在庫切れ",
+    quantity: "数量",
+    totalPrice: "合計金額",
+    addToCart: "カートに入れる",
+    buyNow: "今すぐ購入",
+    reviews: "レビュー",
+    noReview: "まだレビューがありません。",
+    noReviewContent: "レビュー内容がありません。",
+    noImage: "画像なし",
+    anonymous: "匿名",
+    loginRequired: "ログインが必要です。",
+    cartLoginRequired: "ログイン後にカートへ追加できます。",
+    wishlistFailed: "お気に入り処理に失敗しました。",
+    addCartSuccess: "カートに追加しました。",
+    addCartFailed: "カート追加に失敗しました。",
+    translateFailed: "日本語への切り替えに失敗しました。",
+  },
+} as const;
+
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -102,6 +173,24 @@ export default function ProductDetailPage() {
     {}
   );
   const [quantity, setQuantity] = useState(1);
+
+  const { language, setLanguage, mounted } = useLanguage();
+  const [detailTranslating, setDetailTranslating] = useState(false);
+
+  const [translatedProductName, setTranslatedProductName] = useState("");
+  const [translatedDescription, setTranslatedDescription] = useState("");
+  const [translatedCategoryName, setTranslatedCategoryName] = useState("");
+  const [translatedOptionNames, setTranslatedOptionNames] = useState<
+    Record<number, string>
+  >({});
+  const [translatedOptionValues, setTranslatedOptionValues] = useState<
+    Record<number, string>
+  >({});
+  const [translatedReviewComments, setTranslatedReviewComments] = useState<
+    Record<number, string>
+  >({});
+
+  const t = detailText[language];
 
   const normalizeImageUrl = (url?: string | null) => {
     if (!url) return "/no-image.png";
@@ -160,6 +249,17 @@ export default function ProductDetailPage() {
       loadProduct();
     }
   }, [productId]);
+
+  useEffect(() => {
+    setTranslatedProductName("");
+    setTranslatedDescription("");
+    setTranslatedCategoryName("");
+    setTranslatedOptionNames({});
+    setTranslatedOptionValues({});
+    setTranslatedReviewComments({});
+    setSelectedOptions({});
+    setQuantity(1);
+  }, [product?.id]);
 
   const selectedVariant = useMemo(() => {
     if (!product?.variants?.length) return null;
@@ -236,7 +336,7 @@ export default function ProductDetailPage() {
     if (!product) return;
 
     if (!user) {
-      alert("로그인이 필요합니다.");
+      alert(t.loginRequired);
       router.push("/login");
       return;
     }
@@ -253,7 +353,7 @@ export default function ProductDetailPage() {
       }
     } catch (error) {
       console.error("찜 처리 실패:", error);
-      alert("찜 처리에 실패했습니다.");
+      alert(t.wishlistFailed);
     }
   };
 
@@ -261,13 +361,13 @@ export default function ProductDetailPage() {
     if (!product) return false;
 
     if (!user) {
-      alert("로그인이 필요합니다.");
+      alert(t.cartLoginRequired);
       router.push("/login");
       return false;
     }
 
     if (product.variants?.length && !selectedVariant) {
-      alert("옵션을 선택해주세요.");
+      alert(t.selectOption);
       return false;
     }
 
@@ -278,11 +378,11 @@ export default function ProductDetailPage() {
         quantity: Number(quantity),
       });
 
-      alert("장바구니에 담았습니다.");
+      alert(t.addCartSuccess);
       return true;
     } catch (error: any) {
       console.error("장바구니 추가 실패:", error);
-      alert(error?.response?.data?.message || "장바구니 담기에 실패했습니다.");
+      alert(error?.response?.data?.message || t.addCartFailed);
       return false;
     }
   };
@@ -294,10 +394,147 @@ export default function ProductDetailPage() {
     }
   };
 
+  const preloadJapaneseTranslations = async () => {
+    if (!product) return;
+
+    try {
+      setDetailTranslating(true);
+
+      if (!translatedProductName && product.name) {
+        try {
+          const result = await translateText({
+            text: product.name,
+            direction: "koToJa",
+          });
+          setTranslatedProductName(result?.translatedText || product.name);
+        } catch (error) {
+          console.error("상품명 번역 실패:", error);
+        }
+      }
+
+      if (!translatedCategoryName && product.Category?.name) {
+        try {
+          const result = await translateText({
+            text: product.Category.name,
+            direction: "koToJa",
+          });
+          setTranslatedCategoryName(
+            result?.translatedText || product.Category.name
+          );
+        } catch (error) {
+          console.error("카테고리 번역 실패:", error);
+        }
+      }
+
+      if (!translatedDescription && product.description) {
+        try {
+          const result = await translateText({
+            text: product.description,
+            direction: "koToJa",
+          });
+          setTranslatedDescription(
+            result?.translatedText || product.description
+          );
+        } catch (error) {
+          console.error("상품 설명 번역 실패:", error);
+        }
+      }
+
+      if (Array.isArray(product.options)) {
+        for (const option of product.options) {
+          if (!translatedOptionNames[option.id] && option.name) {
+            try {
+              const result = await translateText({
+                text: option.name,
+                direction: "koToJa",
+              });
+
+              setTranslatedOptionNames((prev) => ({
+                ...prev,
+                [option.id]: result?.translatedText || option.name,
+              }));
+            } catch (error) {
+              console.error("옵션명 번역 실패:", error);
+            }
+          }
+
+          for (const value of option.values || []) {
+            if (!translatedOptionValues[value.id] && value.value) {
+              try {
+                const result = await translateText({
+                  text: value.value,
+                  direction: "koToJa",
+                });
+
+                setTranslatedOptionValues((prev) => ({
+                  ...prev,
+                  [value.id]: result?.translatedText || value.value,
+                }));
+              } catch (error) {
+                console.error("옵션값 번역 실패:", error);
+              }
+            }
+          }
+        }
+      }
+
+      if (Array.isArray(product.reviews)) {
+        for (const review of product.reviews) {
+          if (!translatedReviewComments[review.id] && review.comment) {
+            try {
+              const result = await translateText({
+                text: review.comment,
+                direction: "koToJa",
+              });
+
+              setTranslatedReviewComments((prev) => ({
+                ...prev,
+                [review.id]: result?.translatedText || review.comment || "",
+              }));
+            } catch (error) {
+              console.error("리뷰 번역 실패:", error);
+            }
+          }
+        }
+      }
+    } finally {
+      setDetailTranslating(false);
+    }
+  };
+
+  useEffect(() => {
+    const run = async () => {
+      if (!mounted) return;
+      if (!product) return;
+      if (language !== "ja") return;
+
+      await preloadJapaneseTranslations();
+    };
+
+    run();
+  }, [mounted, language, product?.id]);
+
+  const handleToggleLanguage = async () => {
+    if (language === "ja") {
+      setLanguage("ko");
+      return;
+    }
+
+    setLanguage("ja");
+  };
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-[#f7f7f7] flex items-center justify-center">
+        <p className="text-gray-500">{t.pageLoading}</p>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f7f7f7] flex items-center justify-center">
-        <p className="text-gray-500">상품 정보를 불러오는 중입니다...</p>
+        <p className="text-gray-500">{t.loading}</p>
       </div>
     );
   }
@@ -305,21 +542,36 @@ export default function ProductDetailPage() {
   if (!product) {
     return (
       <div className="min-h-screen bg-[#f7f7f7] flex items-center justify-center">
-        <p className="text-gray-500">상품을 찾을 수 없습니다.</p>
+        <p className="text-gray-500">{t.notFound}</p>
       </div>
     );
   }
 
+  const displayCategoryName =
+    language === "ja"
+      ? translatedCategoryName || product.Category?.name || t.uncategorized
+      : product.Category?.name || t.uncategorized;
+
+  const displayProductName =
+    language === "ja"
+      ? translatedProductName || product.name
+      : product.name;
+
+  const displayDescription =
+    language === "ja"
+      ? translatedDescription || product.description || t.noDescription
+      : product.description || t.noDescription;
+
   return (
     <div className="min-h-screen bg-[#f7f7f7] text-gray-900">
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex flex-wrap items-center gap-3 mb-6">
           <button
             onClick={() => router.back()}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
           >
             <ArrowLeft size={18} />
-            뒤로가기
+            {t.back}
           </button>
 
           <button
@@ -327,7 +579,16 @@ export default function ProductDetailPage() {
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
           >
             <Home size={18} />
-            홈으로
+            {t.home}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleToggleLanguage}
+            disabled={detailTranslating}
+            className="px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-50"
+          >
+            {detailTranslating ? t.languageLoading : t.languageButton}
           </button>
         </div>
 
@@ -370,11 +631,13 @@ export default function ProductDetailPage() {
 
           <section className="bg-white rounded-3xl border border-gray-200 p-6">
             <p className="text-sm text-gray-500 mb-2">
-              카테고리: {product.Category?.name || "미분류"}
+              {t.category}: {displayCategoryName}
             </p>
 
             <div className="flex items-start justify-between gap-4">
-              <h1 className="text-3xl font-bold leading-tight">{product.name}</h1>
+              <h1 className="text-3xl font-bold leading-tight">
+                {displayProductName}
+              </h1>
 
               <button
                 onClick={handleToggleWishlist}
@@ -392,7 +655,8 @@ export default function ProductDetailPage() {
             <div className="flex items-center gap-3 mt-4">
               <StarRating rating={product.avgRating || 0} />
               <span className="text-sm text-gray-500">
-                ({product.reviewCount || 0}개 리뷰)
+                ({product.reviewCount || 0}
+                {language === "ja" ? ` ${t.reviewUnit}` : t.reviewUnit})
               </span>
             </div>
 
@@ -401,65 +665,88 @@ export default function ProductDetailPage() {
             </p>
 
             <p className="text-gray-600 mt-4 whitespace-pre-line">
-              {product.description || "상품 설명이 없습니다."}
+              {displayDescription}
             </p>
 
             {product.options?.length > 0 && (
               <div className="mt-8 space-y-5">
-                {product.options.map((option) => (
-                  <div key={option.id}>
-                    <p className="font-semibold mb-2">{option.name}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {option.values.map((value) => {
-                        const selected = selectedOptions[option.name] === value.id;
+                {product.options.map((option) => {
+                  const displayOptionName =
+                    language === "ja"
+                      ? translatedOptionNames[option.id] || option.name
+                      : option.name;
 
-                        return (
-                          <button
-                            key={value.id}
-                            onClick={() => handleOptionChange(option.name, value.id)}
-                            className={`px-4 py-2 rounded-xl border text-sm ${
-                              selected
-                                ? "bg-black text-white border-black"
-                                : "bg-white border-gray-300 hover:bg-gray-50"
-                            }`}
-                          >
-                            {value.value}
-                          </button>
-                        );
-                      })}
+                  return (
+                    <div key={option.id}>
+                      <p className="font-semibold mb-2">{displayOptionName}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {option.values.map((value) => {
+                          const selected = selectedOptions[option.name] === value.id;
+                          const displayValue =
+                            language === "ja"
+                              ? translatedOptionValues[value.id] || value.value
+                              : value.value;
+
+                          return (
+                            <button
+                              key={value.id}
+                              onClick={() => handleOptionChange(option.name, value.id)}
+                              className={`px-4 py-2 rounded-xl border text-sm ${
+                                selected
+                                  ? "bg-black text-white border-black"
+                                  : "bg-white border-gray-300 hover:bg-gray-50"
+                              }`}
+                            >
+                              {displayValue}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
             {product.options?.length > 0 && (
               <div className="mt-6 p-4 bg-gray-50 rounded-2xl border border-gray-200">
-                <p className="text-sm text-gray-500 mb-2">선택 옵션</p>
+                <p className="text-sm text-gray-500 mb-2">{t.selectedOption}</p>
                 {selectedVariant ? (
                   <div className="text-sm font-medium">
                     {selectedVariant.options
-                      .map(
-                        (opt) =>
-                          `${opt.value.option.name}: ${opt.value.value}`
-                      )
+                      .map((opt) => {
+                        const optionName =
+                          language === "ja"
+                            ? translatedOptionNames[opt.value.option.id] ||
+                              opt.value.option.name
+                            : opt.value.option.name;
+
+                        const optionValue =
+                          language === "ja"
+                            ? translatedOptionValues[opt.value.id] || opt.value.value
+                            : opt.value.value;
+
+                        return `${optionName}: ${optionValue}`;
+                      })
                       .join(" / ")}
                   </div>
                 ) : (
-                  <div className="text-sm text-red-500">옵션을 선택해주세요.</div>
+                  <div className="text-sm text-red-500">{t.selectOption}</div>
                 )}
               </div>
             )}
 
             <div className="mt-6">
-              <p className="text-sm text-gray-500 mb-2">재고</p>
+              <p className="text-sm text-gray-500 mb-2">{t.stock}</p>
               <p className="font-semibold">
-                {currentStock > 0 ? `재고 ${currentStock}개 남음` : "품절"}
+                {currentStock > 0
+                  ? `${t.stock} ${currentStock}${t.stockRemain}`
+                  : t.soldOut}
               </p>
             </div>
 
             <div className="mt-6">
-              <p className="text-sm text-gray-500 mb-2">수량</p>
+              <p className="text-sm text-gray-500 mb-2">{t.quantity}</p>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setQuantity((prev) => Math.max(1, prev - 1))}
@@ -482,7 +769,7 @@ export default function ProductDetailPage() {
 
             <div className="mt-8 p-4 bg-gray-50 rounded-2xl border border-gray-200">
               <div className="flex items-center justify-between">
-                <span className="text-gray-600">총 금액</span>
+                <span className="text-gray-600">{t.totalPrice}</span>
                 <span className="text-2xl font-bold">
                   {Number(totalPrice).toLocaleString()}원
                 </span>
@@ -496,7 +783,7 @@ export default function ProductDetailPage() {
                 className="h-14 rounded-2xl border border-black text-black font-semibold hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 <ShoppingCart size={18} />
-                장바구니 담기
+                {t.addToCart}
               </button>
 
               <button
@@ -504,7 +791,7 @@ export default function ProductDetailPage() {
                 disabled={currentStock < 1}
                 className="h-14 rounded-2xl bg-black text-white font-semibold hover:opacity-90 disabled:opacity-50"
               >
-                바로 구매
+                {t.buyNow}
               </button>
             </div>
           </section>
@@ -512,7 +799,7 @@ export default function ProductDetailPage() {
 
         <section className="mt-8 bg-white rounded-3xl border border-gray-200 p-6">
           <h2 className="text-2xl font-bold mb-5">
-            리뷰 ({product.reviewCount || 0})
+            {t.reviews} ({product.reviewCount || 0})
           </h2>
 
           {product.reviews?.length ? (
@@ -525,7 +812,7 @@ export default function ProductDetailPage() {
                   <div className="flex items-center justify-between mb-2">
                     <div>
                       <p className="font-semibold">
-                        {review.user?.name || "익명"}
+                        {review.user?.name || t.anonymous}
                       </p>
                       <div className="mt-1">
                         <StarRating rating={review.rating} />
@@ -537,7 +824,11 @@ export default function ProductDetailPage() {
                   </div>
 
                   <p className="text-gray-700 whitespace-pre-line">
-                    {review.comment || "리뷰 내용이 없습니다."}
+                    {language === "ja"
+                      ? translatedReviewComments[review.id] ||
+                        review.comment ||
+                        t.noReviewContent
+                      : review.comment || t.noReviewContent}
                   </p>
 
                   {review.images?.length ? (
@@ -559,7 +850,7 @@ export default function ProductDetailPage() {
               ))}
             </div>
           ) : (
-            <div className="text-gray-500">아직 리뷰가 없습니다.</div>
+            <div className="text-gray-500">{t.noReview}</div>
           )}
         </section>
       </div>

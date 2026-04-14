@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createAddress } from "@/src/api/address";
+import PageTopActions from "@/src/components/PageTopActions";
 
 declare global {
   interface Window {
@@ -117,6 +118,7 @@ export default function NewAddressPage() {
     <div className="min-h-screen bg-[#f7f7f7]">
       <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
+          <PageTopActions backFallbackHref="/" />
           <h1 className="text-2xl font-bold">배송지 등록</h1>
           <Link
             href="/addresses"

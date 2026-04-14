@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { confirmPayment } from "@/src/api/payments";
 
 const CHECKOUT_ORDER_KEY = "sewon_checkout_client_order_key";
+const CHECKOUT_CART_SIGNATURE_KEY = "sewon_checkout_cart_signature";
 
 export default function PaymentSuccessPage() {
   const router = useRouter();
@@ -15,9 +16,10 @@ export default function PaymentSuccessPage() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [message, setMessage] = useState("결제를 확인하는 중입니다...");
 
-  const clearCheckoutKey = () => {
+  const clearCheckoutState = () => {
     if (typeof window !== "undefined") {
       sessionStorage.removeItem(CHECKOUT_ORDER_KEY);
+      sessionStorage.removeItem(CHECKOUT_CART_SIGNATURE_KEY);
     }
   };
 
@@ -38,7 +40,7 @@ export default function PaymentSuccessPage() {
         !Number.isFinite(amountValue) ||
         amountValue <= 0
       ) {
-        clearCheckoutKey();
+        clearCheckoutState();
         setMessage("결제 성공 정보가 올바르지 않습니다.");
         setIsSuccess(false);
         setLoading(false);
@@ -52,16 +54,15 @@ export default function PaymentSuccessPage() {
           amount: amountValue,
         });
 
-        clearCheckoutKey();
+        clearCheckoutState();
         setMessage(result?.message || "결제가 완료되었습니다.");
         setIsSuccess(true);
       } catch (error: any) {
         console.error("결제 승인 실패:", error);
         console.error("백엔드 응답:", error?.response?.data);
 
-        // 서버가 정상 응답한 비즈니스 에러는 키 정리
         if (error?.response) {
-          clearCheckoutKey();
+          clearCheckoutState();
         }
 
         setMessage(

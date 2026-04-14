@@ -15,6 +15,8 @@ import { ProductImageModule } from './product/product-image/product-image.module
 import { ReviewModule } from './review/review.module';
 import { StockModule } from './stock/stock.module';
 import { AdminModule } from './admin/admin.module';
+import { TranslateModule } from './translate/translate.module';
+
 
 @Module({
   imports: [
@@ -32,6 +34,7 @@ import { AdminModule } from './admin/admin.module';
     StockModule,
     ScheduleModule.forRoot(),
     AdminModule,
+    TranslateModule,
   ],
   controllers: [AppController],
   providers: [AppService],

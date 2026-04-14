@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { getAdminOrders, updateAdminOrderStatus } from "@/src/api/admin";
+import PageTopActions from "@/src/components/PageTopActions";
 
 const statusLabelMap: Record<string, string> = {
   PENDING_PAYMENT: "결제대기",
@@ -34,21 +35,105 @@ const allowedTransitions: Record<string, string[]> = {
   REFUNDED: [],
 };
 
+type AdminOrderListItem = {
+  id: number;
+  orderNumber: string;
+  status: string;
+  totalPrice: number;
+  createdAt: string;
+  user?: {
+    name?: string;
+    email?: string;
+  };
+  address?: {
+    recipient?: string;
+    phone?: string;
+    address1?: string;
+    address2?: string;
+  };
+  items?: Array<{
+    id: number;
+    product?: {
+      name?: string;
+    };
+  }>;
+  _count?: {
+    items?: number;
+  };
+};
+
+type OrdersResponse = {
+  items: AdminOrderListItem[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  summary: {
+    totalCount: number;
+    totalAmount: number;
+    pendingCount: number;
+    shippingCount: number;
+    cancelledCount: number;
+  };
+};
+
 export default function AdminOrdersPage() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<AdminOrderListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [searchKeyword, setSearchKeyword] = useState("");
   const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
+
+  const [searchInput, setSearchInput] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  const [summary, setSummary] = useState({
+    totalCount: 0,
+    totalAmount: 0,
+    pendingCount: 0,
+    shippingCount: 0,
+    cancelledCount: 0,
+  });
+  const [totalPages, setTotalPages] = useState(1);
 
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const res = await getAdminOrders();
-      setOrders(Array.isArray(res) ? res : []);
+
+      const res: OrdersResponse = await getAdminOrders({
+        page,
+        pageSize,
+        status: statusFilter,
+        keyword,
+        sortBy,
+        sortOrder,
+      });
+
+      setOrders(Array.isArray(res?.items) ? res.items : []);
+      setSummary(
+        res?.summary ?? {
+          totalCount: 0,
+          totalAmount: 0,
+          pendingCount: 0,
+          shippingCount: 0,
+          cancelledCount: 0,
+        }
+      );
+      setTotalPages(Math.max(1, Number(res?.totalPages ?? 1)));
     } catch (error) {
       console.error("주문 조회 실패", error);
       setOrders([]);
+      setSummary({
+        totalCount: 0,
+        totalAmount: 0,
+        pendingCount: 0,
+        shippingCount: 0,
+        cancelledCount: 0,
+      });
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
@@ -56,57 +141,7 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     fetchOrders();
-  }, []);
-
-  const filteredOrders = useMemo(() => {
-    return orders.filter((order) => {
-      const matchesStatus =
-        statusFilter === "ALL" ? true : order.status === statusFilter;
-
-      const keyword = searchKeyword.trim().toLowerCase();
-      const matchesKeyword = keyword
-        ? [
-            order.orderNumber,
-            order.user?.name,
-            order.user?.email,
-            order.address?.recipient,
-            order.address?.phone,
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(keyword)
-        : true;
-
-      return matchesStatus && matchesKeyword;
-    });
-  }, [orders, searchKeyword, statusFilter]);
-
-  const summary = useMemo(() => {
-    const totalAmount = filteredOrders.reduce(
-      (sum, order) => sum + Number(order.totalPrice ?? 0),
-      0
-    );
-
-    const pendingCount = filteredOrders.filter(
-      (order) => order.status === "PENDING_PAYMENT"
-    ).length;
-
-    const shippingCount = filteredOrders.filter(
-      (order) => order.status === "SHIPPING"
-    ).length;
-
-    const cancelledCount = filteredOrders.filter(
-      (order) => order.status === "CANCELLED"
-    ).length;
-
-    return {
-      totalCount: filteredOrders.length,
-      totalAmount,
-      pendingCount,
-      shippingCount,
-      cancelledCount,
-    };
-  }, [filteredOrders]);
+  }, [page, pageSize, statusFilter, keyword, sortBy, sortOrder]);
 
   const getSelectableStatuses = (currentStatus: string) => {
     const nextStatuses = allowedTransitions[currentStatus] ?? [];
@@ -117,7 +152,11 @@ export default function AdminOrdersPage() {
     return (allowedTransitions[currentStatus] ?? []).length === 0;
   };
 
-  const handleStatusChange = async (orderId: number, currentStatus: string, nextStatus: string) => {
+  const handleStatusChange = async (
+    orderId: number,
+    currentStatus: string,
+    nextStatus: string
+  ) => {
     if (currentStatus === nextStatus) return;
 
     try {
@@ -145,7 +184,35 @@ export default function AdminOrdersPage() {
     }
   };
 
-  if (loading) {
+  const handleSearchSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setPage(1);
+    setKeyword(searchInput.trim());
+  };
+
+  const handleReset = () => {
+    setSearchInput("");
+    setKeyword("");
+    setStatusFilter("ALL");
+    setSortBy("createdAt");
+    setSortOrder("desc");
+    setPage(1);
+    setPageSize(20);
+  };
+
+  const pageNumbers = useMemo(() => {
+    const windowSize = 5;
+    const start = Math.max(1, page - 2);
+    const end = Math.min(totalPages, start + windowSize - 1);
+    const adjustedStart = Math.max(1, end - windowSize + 1);
+
+    return Array.from(
+      { length: end - adjustedStart + 1 },
+      (_, idx) => adjustedStart + idx
+    );
+  }, [page, totalPages]);
+
+  if (loading && orders.length === 0) {
     return <div className="p-6">주문 데이터를 불러오는 중입니다...</div>;
   }
 
@@ -155,9 +222,10 @@ export default function AdminOrdersPage() {
         <div>
           <h1 className="text-2xl font-bold">주문 관리</h1>
           <p className="mt-1 text-sm text-gray-500">
-            주문 검색, 상태 변경, 배송 현황을 한 번에 관리합니다.
+            서버 페이지네이션과 검색/필터/정렬 기준으로 주문 목록을 관리합니다.
           </p>
         </div>
+        <PageTopActions backFallbackHref="/admin" />
       </div>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-5">
@@ -190,19 +258,25 @@ export default function AdminOrdersPage() {
       </section>
 
       <section className="rounded-xl border p-4">
-        <div className="grid gap-3 md:grid-cols-2">
+        <form
+          onSubmit={handleSearchSubmit}
+          className="grid gap-3 md:grid-cols-2 xl:grid-cols-6"
+        >
           <input
             type="text"
-            className="rounded-lg border px-3 py-2"
+            className="rounded-lg border px-3 py-2 xl:col-span-2"
             placeholder="주문번호 / 주문자 / 이메일 / 수령인 / 연락처 검색"
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
           />
 
           <select
             className="rounded-lg border px-3 py-2"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
           >
             <option value="ALL">전체 상태</option>
             <option value="PENDING_PAYMENT">결제대기</option>
@@ -213,32 +287,82 @@ export default function AdminOrdersPage() {
             <option value="RETURNED">반품완료</option>
             <option value="REFUNDED">환불완료</option>
           </select>
-        </div>
+
+          <select
+            className="rounded-lg border px-3 py-2"
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="createdAt">주문일</option>
+            <option value="totalPrice">주문금액</option>
+            <option value="orderNumber">주문번호</option>
+            <option value="status">주문상태</option>
+          </select>
+
+          <select
+            className="rounded-lg border px-3 py-2"
+            value={sortOrder}
+            onChange={(e) => {
+              setSortOrder(e.target.value as "asc" | "desc");
+              setPage(1);
+            }}
+          >
+            <option value="desc">내림차순</option>
+            <option value="asc">오름차순</option>
+          </select>
+
+          <select
+            className="rounded-lg border px-3 py-2"
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+          >
+            <option value={10}>10개씩</option>
+            <option value={20}>20개씩</option>
+            <option value={50}>50개씩</option>
+          </select>
+
+          <div className="flex gap-2 xl:col-span-6">
+            <button
+              type="submit"
+              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white"
+            >
+              검색
+            </button>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="rounded-lg border px-4 py-2 text-sm font-medium"
+            >
+              초기화
+            </button>
+          </div>
+        </form>
       </section>
 
-      {filteredOrders.length === 0 ? (
+      {loading ? (
+        <div className="rounded-xl border p-4 text-gray-500">
+          주문 데이터를 불러오는 중입니다...
+        </div>
+      ) : orders.length === 0 ? (
         <div className="rounded-xl border p-4 text-gray-500">
           조회된 주문 데이터가 없습니다.
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredOrders.map((order) => {
-            const itemCount = Array.isArray(order.items)
-              ? order.items.reduce(
-                  (sum: number, item: any) => sum + Number(item.quantity ?? 0),
-                  0
-                )
-              : 0;
-
+          {orders.map((order) => {
             const firstItemName =
               Array.isArray(order.items) && order.items.length > 0
                 ? order.items[0]?.product?.name ?? "상품 정보 없음"
                 : "상품 정보 없음";
 
-            const extraItemCount =
-              Array.isArray(order.items) && order.items.length > 1
-                ? order.items.length - 1
-                : 0;
+            const itemCount = Number(order._count?.items ?? 0);
+            const extraItemCount = itemCount > 1 ? itemCount - 1 : 0;
 
             const selectableStatuses = getSelectableStatuses(order.status);
             const locked = isStatusLocked(order.status);
@@ -281,7 +405,7 @@ export default function AdminOrdersPage() {
                     </div>
 
                     <div className="text-sm text-gray-600">
-                      상품 수량 합계: {itemCount}개
+                      주문 상품 수: {itemCount}건
                     </div>
 
                     <div className="text-sm text-gray-600">
@@ -306,20 +430,6 @@ export default function AdminOrdersPage() {
                     </div>
                   </div>
                 </div>
-
-                {Array.isArray(order.items) && order.items.length > 0 && (
-                  <div className="rounded-lg bg-gray-50 p-3">
-                    <div className="mb-2 text-sm font-medium">주문 상품</div>
-                    <div className="space-y-1 text-sm text-gray-700">
-                      {order.items.map((item: any) => (
-                        <div key={item.id}>
-                          {item.product?.name ?? "상품"} / 수량 {item.quantity}개 / 금액{" "}
-                          {Number(item.price ?? 0).toLocaleString()}원
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center">
@@ -364,6 +474,39 @@ export default function AdminOrdersPage() {
           })}
         </div>
       )}
+
+      <section className="flex flex-wrap items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+          disabled={page === 1}
+          className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+        >
+          이전
+        </button>
+
+        {pageNumbers.map((pageNumber) => (
+          <button
+            key={pageNumber}
+            type="button"
+            onClick={() => setPage(pageNumber)}
+            className={`rounded-lg border px-3 py-2 text-sm ${
+              page === pageNumber ? "bg-black text-white" : "bg-white"
+            }`}
+          >
+            {pageNumber}
+          </button>
+        ))}
+
+        <button
+          type="button"
+          onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+          disabled={page === totalPages}
+          className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+        >
+          다음
+        </button>
+      </section>
     </div>
   );
 }

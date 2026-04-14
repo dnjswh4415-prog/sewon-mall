@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const CHECKOUT_ORDER_KEY = "sewon_checkout_client_order_key";
+const CHECKOUT_CART_SIGNATURE_KEY = "sewon_checkout_cart_signature";
 
 export default function PaymentFailPage() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function PaymentFailPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       sessionStorage.removeItem(CHECKOUT_ORDER_KEY);
+      sessionStorage.removeItem(CHECKOUT_CART_SIGNATURE_KEY);
     }
   }, []);
 

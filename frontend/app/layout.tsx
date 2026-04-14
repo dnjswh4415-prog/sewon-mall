@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+import { LanguageProvider } from "@/src/contexts/LanguageContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,9 +29,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <LanguageProvider>{children}</LanguageProvider>
 
-        {/* 🔥 카카오 도로명 주소 API */}
+          {/*카카오 도로명 주소 API */}
         <Script
           src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"
           strategy="afterInteractive"

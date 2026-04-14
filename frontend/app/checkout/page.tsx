@@ -6,11 +6,14 @@ import { loadTossPayments } from "@tosspayments/payment-sdk";
 import { getCart } from "@/src/api/cart";
 import { createOrder } from "@/src/api/orders";
 import { getAddresses, createAddress } from "@/src/api/address";
+import { useJapanesePageTranslation } from "@/src/hooks/useJapanesePageTranslation";
 
 const TOSS_CLIENT_KEY = "test_ck_E92LAa5PVbq2QDQozOB937YmpXyJ";
 const DAUM_POSTCODE_SCRIPT =
   "https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js";
+
 const CHECKOUT_ORDER_KEY = "sewon_checkout_client_order_key";
+const CHECKOUT_CART_SIGNATURE_KEY = "sewon_checkout_cart_signature";
 
 declare global {
   interface Window {
@@ -37,6 +40,87 @@ declare global {
   }
 }
 
+const pageText = {
+  ko: {
+    title: "주문서",
+    goCart: "장바구니로",
+    languageButton: "日本語",
+    languageLoading: "번역 중...",
+    loading: "주문서를 불러오는 중입니다...",
+    shippingTitle: "배송지 선택",
+    newAddressOpen: "새 배송지 입력",
+    newAddressClose: "입력 폼 닫기",
+    noAddresses: "등록된 배송지가 없습니다.",
+    defaultAddress: "기본 배송지",
+    recipient: "받는 분",
+    phone: "연락처",
+    zipcode: "우편번호",
+    address1: "기본 주소",
+    address2: "상세 주소",
+    findZipcode: "우편번호 찾기",
+    saveAsDefault: "기본 배송지로 저장",
+    saveAddress: "배송지 저장",
+    savingAddress: "저장 중...",
+    orderItems: "주문 상품",
+    quantityUnit: "수량",
+    totalPayment: "총 결제 금액",
+    payButton: "토스페이 결제하기",
+    payingButton: "결제 요청 중...",
+    postcodeLoadFail: "우편번호 서비스를 불러오지 못했습니다.",
+    orderLoadFail: "주문서 정보를 불러오지 못했습니다.",
+    recipientRequired: "받는 분 이름을 입력해주세요.",
+    phoneRequired: "연락처를 입력해주세요.",
+    zipcodeRequired: "우편번호를 입력해주세요.",
+    address1Required: "기본 주소를 입력해주세요.",
+    addressSaved: "배송지가 저장되었습니다.",
+    addressSaveFailed: "배송지 저장에 실패했습니다.",
+    selectAddress: "배송지를 선택하거나 먼저 등록해주세요.",
+    emptyCart: "장바구니에 상품이 없습니다.",
+    paymentFailed: "결제 요청에 실패했습니다.",
+    orderNameFallback: "주문상품",
+    customerFallback: "고객",
+  },
+  ja: {
+    title: "注文書",
+    goCart: "カートへ",
+    languageButton: "한국어",
+    languageLoading: "翻訳中...",
+    loading: "注文書を読み込み中です...",
+    shippingTitle: "配送先選択",
+    newAddressOpen: "新しい配送先入力",
+    newAddressClose: "入力フォームを閉じる",
+    noAddresses: "登録された配送先がありません。",
+    defaultAddress: "基本配送先",
+    recipient: "受取人",
+    phone: "連絡先",
+    zipcode: "郵便番号",
+    address1: "基本住所",
+    address2: "詳細住所",
+    findZipcode: "郵便番号検索",
+    saveAsDefault: "基本配送先として保存",
+    saveAddress: "配送先を保存",
+    savingAddress: "保存中...",
+    orderItems: "注文商品",
+    quantityUnit: "数量",
+    totalPayment: "合計お支払い金額",
+    payButton: "Toss Payで決済する",
+    payingButton: "決済リクエスト中...",
+    postcodeLoadFail: "郵便番号サービスを読み込めませんでした。",
+    orderLoadFail: "注文書情報を読み込めませんでした。",
+    recipientRequired: "受取人名を入力してください。",
+    phoneRequired: "連絡先を入力してください。",
+    zipcodeRequired: "郵便番号を入力してください。",
+    address1Required: "基本住所を入力してください。",
+    addressSaved: "配送先が保存されました。",
+    addressSaveFailed: "配送先の保存に失敗しました。",
+    selectAddress: "配送先を選択するか先に登録してください。",
+    emptyCart: "カートに商品がありません。",
+    paymentFailed: "決済リクエストに失敗しました。",
+    orderNameFallback: "注文商品",
+    customerFallback: "お客様",
+  },
+} as const;
+
 const getOrCreateClientOrderKey = () => {
   if (typeof window === "undefined") return "";
 
@@ -50,6 +134,44 @@ const getOrCreateClientOrderKey = () => {
 
   sessionStorage.setItem(CHECKOUT_ORDER_KEY, newKey);
   return newKey;
+};
+
+const getResolvedProductId = (item: any) => {
+  return Number(item.productId ?? item.product?.id ?? 0);
+};
+
+const getResolvedVariantId = (item: any) => {
+  if (item.variantId != null) return Number(item.variantId);
+  if (item.variant?.id != null) return Number(item.variant.id);
+  return null;
+};
+
+const getResolvedUnitPrice = (item: any) => {
+  const resolvedVariantId = getResolvedVariantId(item);
+
+  if (resolvedVariantId != null && item.variant?.price != null) {
+    return Number(item.variant.price);
+  }
+
+  return Number(item.product?.price ?? 0);
+};
+
+const makeCartSignature = (items: any[]) => {
+  return JSON.stringify(
+    [...items]
+      .map((item: any) => ({
+        productId: getResolvedProductId(item),
+        variantId: getResolvedVariantId(item),
+        quantity: Number(item.quantity ?? 0),
+      }))
+      .sort((a, b) => {
+        if (a.productId !== b.productId) return a.productId - b.productId;
+        if ((a.variantId ?? 0) !== (b.variantId ?? 0)) {
+          return (a.variantId ?? 0) - (b.variantId ?? 0);
+        }
+        return a.quantity - b.quantity;
+      })
+  );
 };
 
 export default function CheckoutPage() {
@@ -72,18 +194,50 @@ export default function CheckoutPage() {
   const [address2, setAddress2] = useState("");
   const [isDefault, setIsDefault] = useState(true);
 
+  const translationItems = useMemo(() => {
+    return [
+      ...addresses.flatMap((address: any) => [
+        {
+          key: `address-recipient-${address.id}`,
+          text: address?.recipient || "",
+        },
+        {
+          key: `address1-${address.id}`,
+          text: address?.address1 || "",
+        },
+        {
+          key: `address2-${address.id}`,
+          text: address?.address2 || "",
+        },
+      ]),
+      ...cartItems.map((item: any) => ({
+        key: `checkout-product-${item.id}`,
+        text: item?.product?.name || "",
+      })),
+    ];
+  }, [addresses, cartItems]);
+
+  const {
+    language,
+    mounted,
+    translating,
+    getText,
+    handleToggleLanguage,
+  } = useJapanesePageTranslation({
+    items: translationItems,
+  });
+
+  const pt = pageText[language];
+
   const selectedAddress = useMemo(() => {
-    return addresses.find((address: any) => address.id === selectedAddressId) || null;
+    return (
+      addresses.find((address: any) => address.id === selectedAddressId) || null
+    );
   }, [addresses, selectedAddressId]);
 
   const totalPrice = useMemo(() => {
     return cartItems.reduce((sum: number, item: any) => {
-      const unitPrice =
-        item.variant?.price != null
-          ? Number(item.variant.price)
-          : Number(item.product?.price ?? 0);
-
-      return sum + unitPrice * Number(item.quantity);
+      return sum + getResolvedUnitPrice(item) * Number(item.quantity);
     }, 0);
   }, [cartItems]);
 
@@ -101,7 +255,7 @@ export default function CheckoutPage() {
         existing.addEventListener("load", () => resolve(), { once: true });
         existing.addEventListener(
           "error",
-          () => reject(new Error("우편번호 스크립트 로드 실패")),
+          () => reject(new Error(pt.postcodeLoadFail)),
           { once: true }
         );
         return;
@@ -111,7 +265,7 @@ export default function CheckoutPage() {
       script.src = DAUM_POSTCODE_SCRIPT;
       script.async = true;
       script.onload = () => resolve();
-      script.onerror = () => reject(new Error("우편번호 스크립트 로드 실패"));
+      script.onerror = () => reject(new Error(pt.postcodeLoadFail));
       document.body.appendChild(script);
     });
   };
@@ -124,7 +278,7 @@ export default function CheckoutPage() {
         window.kakao?.Postcode || window.daum?.Postcode;
 
       if (!PostcodeConstructor) {
-        alert("우편번호 서비스를 불러오지 못했습니다.");
+        alert(pt.postcodeLoadFail);
         return;
       }
 
@@ -153,7 +307,7 @@ export default function CheckoutPage() {
       }).open();
     } catch (error) {
       console.error("우편번호 서비스 실행 실패:", error);
-      alert("우편번호 서비스를 불러오지 못했습니다.");
+      alert(pt.postcodeLoadFail);
     }
   };
 
@@ -172,8 +326,21 @@ export default function CheckoutPage() {
       setCartItems(cartArray);
       setAddresses(addressArray);
 
+      const nextSignature = makeCartSignature(cartArray);
+
+      if (typeof window !== "undefined") {
+        const savedSignature = sessionStorage.getItem(CHECKOUT_CART_SIGNATURE_KEY);
+
+        if (savedSignature !== nextSignature) {
+          sessionStorage.removeItem(CHECKOUT_ORDER_KEY);
+          sessionStorage.setItem(CHECKOUT_CART_SIGNATURE_KEY, nextSignature);
+        }
+      }
+
       const defaultAddress =
-        addressArray.find((addr: any) => addr.isDefault) || addressArray[0] || null;
+        addressArray.find((addr: any) => addr.isDefault) ||
+        addressArray[0] ||
+        null;
 
       setSelectedAddressId(defaultAddress?.id ?? null);
 
@@ -182,7 +349,7 @@ export default function CheckoutPage() {
       }
     } catch (error) {
       console.error("주문서 데이터 로딩 실패:", error);
-      alert("주문서 정보를 불러오지 못했습니다.");
+      alert(pt.orderLoadFail);
     } finally {
       setLoading(false);
     }
@@ -205,22 +372,22 @@ export default function CheckoutPage() {
     if (savingAddress) return;
 
     if (!recipient.trim()) {
-      alert("받는 분 이름을 입력해주세요.");
+      alert(pt.recipientRequired);
       return;
     }
 
     if (!phone.trim()) {
-      alert("연락처를 입력해주세요.");
+      alert(pt.phoneRequired);
       return;
     }
 
     if (!zipcode.trim()) {
-      alert("우편번호를 입력해주세요.");
+      alert(pt.zipcodeRequired);
       return;
     }
 
     if (!address1.trim()) {
-      alert("기본 주소를 입력해주세요.");
+      alert(pt.address1Required);
       return;
     }
 
@@ -256,10 +423,10 @@ export default function CheckoutPage() {
 
       setShowAddressForm(false);
       resetAddressForm();
-      alert("배송지가 저장되었습니다.");
+      alert(pt.addressSaved);
     } catch (error: any) {
       console.error("배송지 저장 실패:", error);
-      alert(error?.response?.data?.message || "배송지 저장에 실패했습니다.");
+      alert(error?.response?.data?.message || pt.addressSaveFailed);
     } finally {
       setSavingAddress(false);
     }
@@ -269,28 +436,59 @@ export default function CheckoutPage() {
     if (isPaying) return;
 
     if (!selectedAddressId) {
-      alert("배송지를 선택하거나 먼저 등록해주세요.");
+      alert(pt.selectAddress);
       return;
     }
 
     if (!cartItems.length) {
-      alert("장바구니에 상품이 없습니다.");
+      alert(pt.emptyCart);
       return;
     }
+
+    const payloadItems = cartItems.map((item: any) => ({
+      cartItemId: item.id,
+      productId: getResolvedProductId(item),
+      rawProductId: item.productId,
+      productObjId: item.product?.id,
+      variantId: getResolvedVariantId(item),
+      rawVariantId: item.variantId,
+      variantObjId: item.variant?.id,
+      unitPrice: getResolvedUnitPrice(item),
+      productPrice: item.product?.price,
+      variantPrice: item.variant?.price,
+      quantity: Number(item.quantity),
+      lineTotal: getResolvedUnitPrice(item) * Number(item.quantity),
+    }));
+
+    console.table(payloadItems);
+    console.log("checkout totalPrice (front)", totalPrice);
 
     try {
       setIsPaying(true);
 
       const clientOrderKey = getOrCreateClientOrderKey();
+      console.log("clientOrderKey", clientOrderKey);
 
-      const order = await createOrder({
+      const orderPayload = {
         addressId: Number(selectedAddressId),
         clientOrderKey,
         items: cartItems.map((item: any) => ({
-          productId: Number(item.productId),
-          variantId: item.variantId ? Number(item.variantId) : null,
+          productId: getResolvedProductId(item),
+          variantId: getResolvedVariantId(item),
           quantity: Number(item.quantity),
         })),
+      };
+
+      console.log("createOrder payload", orderPayload);
+
+      const order = await createOrder(orderPayload);
+
+      console.log("order.totalPrice (server)", Number(order.totalPrice));
+      console.log("order.orderNumber (server)", order.orderNumber);
+      console.log("front vs server diff", {
+        frontTotalPrice: Number(totalPrice),
+        serverTotalPrice: Number(order.totalPrice),
+        diff: Number(order.totalPrice) - Number(totalPrice),
       });
 
       const tossPayments = await loadTossPayments(TOSS_CLIENT_KEY);
@@ -301,43 +499,59 @@ export default function CheckoutPage() {
         orderName:
           cartItems.length > 1
             ? `${cartItems[0].product?.name} 외 ${cartItems.length - 1}건`
-            : cartItems[0].product?.name || "주문상품",
-        customerName: selectedAddress?.recipient || "고객",
+            : cartItems[0].product?.name || pt.orderNameFallback,
+        customerName: selectedAddress?.recipient || pt.customerFallback,
         successUrl: "http://localhost:3000/payment/success",
         failUrl: "http://localhost:3000/payment/fail",
       });
     } catch (error: any) {
       console.error("결제 요청 실패:", error);
-      alert(error?.response?.data?.message || error?.message || "결제 요청에 실패했습니다.");
+      alert(error?.response?.data?.message || error?.message || pt.paymentFailed);
       setIsPaying(false);
     }
   };
 
+  if (!mounted) {
+    return <div className="p-10">{pageText.ko.loading}</div>;
+  }
+
   if (loading) {
-    return <div className="p-10">주문서를 불러오는 중입니다...</div>;
+    return <div className="p-10">{pt.loading}</div>;
   }
 
   return (
     <div className="min-h-screen bg-[#f7f7f7] py-10">
       <div className="max-w-4xl mx-auto px-4 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-extrabold">주문서</h1>
-          <button
-            type="button"
-            onClick={() => {
-              if (isPaying) return;
-              router.push("/cart");
-            }}
-            className="px-4 py-2 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
-            disabled={isPaying}
-          >
-            장바구니로
-          </button>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <h1 className="text-3xl font-extrabold">{pt.title}</h1>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleToggleLanguage}
+              disabled={translating}
+              className="px-4 py-2 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              {translating ? pt.languageLoading : pt.languageButton}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (isPaying) return;
+                router.push("/cart");
+              }}
+              className="px-4 py-2 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+              disabled={isPaying}
+            >
+              {pt.goCart}
+            </button>
+          </div>
         </div>
 
         <section className="bg-white rounded-3xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">배송지 선택</h2>
+            <h2 className="text-xl font-bold">{pt.shippingTitle}</h2>
 
             <button
               type="button"
@@ -345,12 +559,12 @@ export default function CheckoutPage() {
               disabled={isPaying}
               className="px-4 py-2 rounded-xl border border-gray-300 bg-white disabled:opacity-50"
             >
-              {showAddressForm ? "입력 폼 닫기" : "새 배송지 입력"}
+              {showAddressForm ? pt.newAddressClose : pt.newAddressOpen}
             </button>
           </div>
 
           {addresses.length === 0 && !showAddressForm ? (
-            <p className="text-gray-500">등록된 배송지가 없습니다.</p>
+            <p className="text-gray-500">{pt.noAddresses}</p>
           ) : null}
 
           {addresses.length > 0 && (
@@ -368,14 +582,18 @@ export default function CheckoutPage() {
                   />
                   <div>
                     <div className="font-semibold">
-                      {address.recipient}
+                      {getText(`address-recipient-${address.id}`, address.recipient)}
                       {address.isDefault && (
-                        <span className="ml-2 text-xs text-blue-600">기본 배송지</span>
+                        <span className="ml-2 text-xs text-blue-600">
+                          {pt.defaultAddress}
+                        </span>
                       )}
                     </div>
                     <div className="text-sm text-gray-600">{address.phone}</div>
                     <div className="text-sm text-gray-600">
-                      ({address.zipcode}) {address.address1} {address.address2}
+                      ({address.zipcode}){" "}
+                      {getText(`address1-${address.id}`, address.address1)}{" "}
+                      {getText(`address2-${address.id}`, address.address2)}
                     </div>
                   </div>
                 </label>
@@ -389,7 +607,7 @@ export default function CheckoutPage() {
                 <input
                   value={recipient}
                   onChange={(e) => setRecipient(e.target.value)}
-                  placeholder="받는 분"
+                  placeholder={pt.recipient}
                   className="border rounded-xl px-4 py-3 bg-white"
                   disabled={isPaying || savingAddress}
                 />
@@ -397,7 +615,7 @@ export default function CheckoutPage() {
                 <input
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="연락처"
+                  placeholder={pt.phone}
                   className="border rounded-xl px-4 py-3 bg-white"
                   disabled={isPaying || savingAddress}
                 />
@@ -407,7 +625,7 @@ export default function CheckoutPage() {
                 <input
                   value={zipcode}
                   onChange={(e) => setZipcode(e.target.value)}
-                  placeholder="우편번호"
+                  placeholder={pt.zipcode}
                   className="border rounded-xl px-4 py-3 bg-white"
                   readOnly
                 />
@@ -415,7 +633,7 @@ export default function CheckoutPage() {
                 <input
                   value={address1}
                   onChange={(e) => setAddress1(e.target.value)}
-                  placeholder="기본 주소"
+                  placeholder={pt.address1}
                   className="border rounded-xl px-4 py-3 bg-white"
                   readOnly
                 />
@@ -426,14 +644,14 @@ export default function CheckoutPage() {
                   disabled={isPaying || savingAddress}
                   className="px-4 py-3 rounded-xl bg-black text-white font-semibold disabled:opacity-50"
                 >
-                  우편번호 찾기
+                  {pt.findZipcode}
                 </button>
               </div>
 
               <input
                 value={address2}
                 onChange={(e) => setAddress2(e.target.value)}
-                placeholder="상세 주소"
+                placeholder={pt.address2}
                 className="w-full border rounded-xl px-4 py-3 bg-white"
                 disabled={isPaying || savingAddress}
               />
@@ -445,7 +663,7 @@ export default function CheckoutPage() {
                   onChange={(e) => setIsDefault(e.target.checked)}
                   disabled={isPaying || savingAddress}
                 />
-                기본 배송지로 저장
+                {pt.saveAsDefault}
               </label>
 
               <button
@@ -454,28 +672,27 @@ export default function CheckoutPage() {
                 disabled={savingAddress || isPaying}
                 className="px-5 py-3 rounded-xl bg-black text-white font-semibold disabled:opacity-50"
               >
-                {savingAddress ? "저장 중..." : "배송지 저장"}
+                {savingAddress ? pt.savingAddress : pt.saveAddress}
               </button>
             </div>
           )}
         </section>
 
         <section className="bg-white rounded-3xl border border-gray-200 p-6">
-          <h2 className="text-xl font-bold mb-4">주문 상품</h2>
+          <h2 className="text-xl font-bold mb-4">{pt.orderItems}</h2>
 
           <div className="space-y-4">
             {cartItems.map((item: any) => {
-              const unitPrice =
-                item.variant?.price != null
-                  ? Number(item.variant.price)
-                  : Number(item.product?.price ?? 0);
+              const unitPrice = getResolvedUnitPrice(item);
 
               return (
                 <div key={item.id} className="flex justify-between border-b pb-4">
                   <div>
-                    <div className="font-semibold">{item.product?.name}</div>
+                    <div className="font-semibold">
+                      {getText(`checkout-product-${item.id}`, item.product?.name)}
+                    </div>
                     <div className="text-sm text-gray-500">
-                      수량 {item.quantity}개
+                      {pt.quantityUnit} {item.quantity}개
                     </div>
                   </div>
                   <div className="font-bold">
@@ -489,7 +706,7 @@ export default function CheckoutPage() {
 
         <section className="bg-white rounded-3xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
-            <span className="text-lg font-bold">총 결제 금액</span>
+            <span className="text-lg font-bold">{pt.totalPayment}</span>
             <span className="text-2xl font-extrabold">
               {totalPrice.toLocaleString()}원
             </span>
@@ -501,7 +718,7 @@ export default function CheckoutPage() {
             disabled={isPaying || loading || cartItems.length === 0}
             className="w-full h-14 rounded-2xl bg-black text-white font-semibold disabled:opacity-50"
           >
-            {isPaying ? "결제 요청 중..." : "토스페이 결제하기"}
+            {isPaying ? pt.payingButton : pt.payButton}
           </button>
         </section>
       </div>
