@@ -8,8 +8,7 @@ import { getProfile } from "@/src/api/auth";
 import { getWishlist, toggleWishlist } from "@/src/api/wishlist";
 import api from "@/src/api/axios";
 import StarRating from "@/src/components/StarRating";
-import { translateText } from "@/src/api/translate";
-import { useLanguage } from "@/src/contexts/LanguageContext";
+import { useJapanesePageTranslation } from "@/src/hooks/useJapanesePageTranslation";
 
 const API_BASE_URL = "http://localhost:5000";
 
@@ -120,7 +119,6 @@ const detailText = {
     wishlistFailed: "찜 처리에 실패했습니다.",
     addCartSuccess: "장바구니에 담았습니다.",
     addCartFailed: "장바구니 담기에 실패했습니다.",
-    translateFailed: "일본어 전환에 실패했습니다.",
   },
   ja: {
     back: "戻る",
@@ -153,7 +151,6 @@ const detailText = {
     wishlistFailed: "お気に入り処理に失敗しました。",
     addCartSuccess: "カートに追加しました。",
     addCartFailed: "カート追加に失敗しました。",
-    translateFailed: "日本語への切り替えに失敗しました。",
   },
 } as const;
 
@@ -174,21 +171,51 @@ export default function ProductDetailPage() {
   );
   const [quantity, setQuantity] = useState(1);
 
-  const { language, setLanguage, mounted } = useLanguage();
-  const [detailTranslating, setDetailTranslating] = useState(false);
+  const translationItems = useMemo(() => {
+    if (!product) return [];
 
-  const [translatedProductName, setTranslatedProductName] = useState("");
-  const [translatedDescription, setTranslatedDescription] = useState("");
-  const [translatedCategoryName, setTranslatedCategoryName] = useState("");
-  const [translatedOptionNames, setTranslatedOptionNames] = useState<
-    Record<number, string>
-  >({});
-  const [translatedOptionValues, setTranslatedOptionValues] = useState<
-    Record<number, string>
-  >({});
-  const [translatedReviewComments, setTranslatedReviewComments] = useState<
-    Record<number, string>
-  >({});
+    const items: { key: string; text: string | null | undefined }[] = [
+      { key: `product-name-${product.id}`, text: product.name },
+      { key: `product-description-${product.id}`, text: product.description },
+      {
+        key: `product-category-${product.id}`,
+        text: product.Category?.name,
+      },
+    ];
+
+    for (const option of product.options || []) {
+      items.push({
+        key: `option-name-${option.id}`,
+        text: option.name,
+      });
+
+      for (const value of option.values || []) {
+        items.push({
+          key: `option-value-${value.id}`,
+          text: value.value,
+        });
+      }
+    }
+
+    for (const review of product.reviews || []) {
+      items.push({
+        key: `review-comment-${review.id}`,
+        text: review.comment,
+      });
+    }
+
+    return items;
+  }, [product]);
+
+  const {
+    language,
+    mounted,
+    translating,
+    getText,
+    handleToggleLanguage,
+  } = useJapanesePageTranslation({
+    items: translationItems,
+  });
 
   const t = detailText[language];
 
@@ -251,12 +278,6 @@ export default function ProductDetailPage() {
   }, [productId]);
 
   useEffect(() => {
-    setTranslatedProductName("");
-    setTranslatedDescription("");
-    setTranslatedCategoryName("");
-    setTranslatedOptionNames({});
-    setTranslatedOptionValues({});
-    setTranslatedReviewComments({});
     setSelectedOptions({});
     setQuantity(1);
   }, [product?.id]);
@@ -394,135 +415,6 @@ export default function ProductDetailPage() {
     }
   };
 
-  const preloadJapaneseTranslations = async () => {
-    if (!product) return;
-
-    try {
-      setDetailTranslating(true);
-
-      if (!translatedProductName && product.name) {
-        try {
-          const result = await translateText({
-            text: product.name,
-            direction: "koToJa",
-          });
-          setTranslatedProductName(result?.translatedText || product.name);
-        } catch (error) {
-          console.error("상품명 번역 실패:", error);
-        }
-      }
-
-      if (!translatedCategoryName && product.Category?.name) {
-        try {
-          const result = await translateText({
-            text: product.Category.name,
-            direction: "koToJa",
-          });
-          setTranslatedCategoryName(
-            result?.translatedText || product.Category.name
-          );
-        } catch (error) {
-          console.error("카테고리 번역 실패:", error);
-        }
-      }
-
-      if (!translatedDescription && product.description) {
-        try {
-          const result = await translateText({
-            text: product.description,
-            direction: "koToJa",
-          });
-          setTranslatedDescription(
-            result?.translatedText || product.description
-          );
-        } catch (error) {
-          console.error("상품 설명 번역 실패:", error);
-        }
-      }
-
-      if (Array.isArray(product.options)) {
-        for (const option of product.options) {
-          if (!translatedOptionNames[option.id] && option.name) {
-            try {
-              const result = await translateText({
-                text: option.name,
-                direction: "koToJa",
-              });
-
-              setTranslatedOptionNames((prev) => ({
-                ...prev,
-                [option.id]: result?.translatedText || option.name,
-              }));
-            } catch (error) {
-              console.error("옵션명 번역 실패:", error);
-            }
-          }
-
-          for (const value of option.values || []) {
-            if (!translatedOptionValues[value.id] && value.value) {
-              try {
-                const result = await translateText({
-                  text: value.value,
-                  direction: "koToJa",
-                });
-
-                setTranslatedOptionValues((prev) => ({
-                  ...prev,
-                  [value.id]: result?.translatedText || value.value,
-                }));
-              } catch (error) {
-                console.error("옵션값 번역 실패:", error);
-              }
-            }
-          }
-        }
-      }
-
-      if (Array.isArray(product.reviews)) {
-        for (const review of product.reviews) {
-          if (!translatedReviewComments[review.id] && review.comment) {
-            try {
-              const result = await translateText({
-                text: review.comment,
-                direction: "koToJa",
-              });
-
-              setTranslatedReviewComments((prev) => ({
-                ...prev,
-                [review.id]: result?.translatedText || review.comment || "",
-              }));
-            } catch (error) {
-              console.error("리뷰 번역 실패:", error);
-            }
-          }
-        }
-      }
-    } finally {
-      setDetailTranslating(false);
-    }
-  };
-
-  useEffect(() => {
-    const run = async () => {
-      if (!mounted) return;
-      if (!product) return;
-      if (language !== "ja") return;
-
-      await preloadJapaneseTranslations();
-    };
-
-    run();
-  }, [mounted, language, product?.id]);
-
-  const handleToggleLanguage = async () => {
-    if (language === "ja") {
-      setLanguage("ko");
-      return;
-    }
-
-    setLanguage("ja");
-  };
-
   if (!mounted) {
     return (
       <div className="min-h-screen bg-[#f7f7f7] flex items-center justify-center">
@@ -547,20 +439,20 @@ export default function ProductDetailPage() {
     );
   }
 
-  const displayCategoryName =
-    language === "ja"
-      ? translatedCategoryName || product.Category?.name || t.uncategorized
-      : product.Category?.name || t.uncategorized;
+  const displayCategoryName = getText(
+    `product-category-${product.id}`,
+    product.Category?.name || t.uncategorized
+  );
 
-  const displayProductName =
-    language === "ja"
-      ? translatedProductName || product.name
-      : product.name;
+  const displayProductName = getText(
+    `product-name-${product.id}`,
+    product.name
+  );
 
-  const displayDescription =
-    language === "ja"
-      ? translatedDescription || product.description || t.noDescription
-      : product.description || t.noDescription;
+  const displayDescription = getText(
+    `product-description-${product.id}`,
+    product.description || t.noDescription
+  );
 
   return (
     <div className="min-h-screen bg-[#f7f7f7] text-gray-900">
@@ -585,10 +477,10 @@ export default function ProductDetailPage() {
           <button
             type="button"
             onClick={handleToggleLanguage}
-            disabled={detailTranslating}
+            disabled={translating}
             className="px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-50"
           >
-            {detailTranslating ? t.languageLoading : t.languageButton}
+            {translating ? t.languageLoading : t.languageButton}
           </button>
         </div>
 
@@ -671,10 +563,10 @@ export default function ProductDetailPage() {
             {product.options?.length > 0 && (
               <div className="mt-8 space-y-5">
                 {product.options.map((option) => {
-                  const displayOptionName =
-                    language === "ja"
-                      ? translatedOptionNames[option.id] || option.name
-                      : option.name;
+                  const displayOptionName = getText(
+                    `option-name-${option.id}`,
+                    option.name
+                  );
 
                   return (
                     <div key={option.id}>
@@ -682,10 +574,10 @@ export default function ProductDetailPage() {
                       <div className="flex flex-wrap gap-2">
                         {option.values.map((value) => {
                           const selected = selectedOptions[option.name] === value.id;
-                          const displayValue =
-                            language === "ja"
-                              ? translatedOptionValues[value.id] || value.value
-                              : value.value;
+                          const displayValue = getText(
+                            `option-value-${value.id}`,
+                            value.value
+                          );
 
                           return (
                             <button
@@ -715,16 +607,15 @@ export default function ProductDetailPage() {
                   <div className="text-sm font-medium">
                     {selectedVariant.options
                       .map((opt) => {
-                        const optionName =
-                          language === "ja"
-                            ? translatedOptionNames[opt.value.option.id] ||
-                              opt.value.option.name
-                            : opt.value.option.name;
+                        const optionName = getText(
+                          `option-name-${opt.value.option.id}`,
+                          opt.value.option.name
+                        );
 
-                        const optionValue =
-                          language === "ja"
-                            ? translatedOptionValues[opt.value.id] || opt.value.value
-                            : opt.value.value;
+                        const optionValue = getText(
+                          `option-value-${opt.value.id}`,
+                          opt.value.value
+                        );
 
                         return `${optionName}: ${optionValue}`;
                       })
@@ -824,11 +715,10 @@ export default function ProductDetailPage() {
                   </div>
 
                   <p className="text-gray-700 whitespace-pre-line">
-                    {language === "ja"
-                      ? translatedReviewComments[review.id] ||
-                        review.comment ||
-                        t.noReviewContent
-                      : review.comment || t.noReviewContent}
+                    {getText(
+                      `review-comment-${review.id}`,
+                      review.comment || t.noReviewContent
+                    )}
                   </p>
 
                   {review.images?.length ? (

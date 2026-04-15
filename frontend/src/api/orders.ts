@@ -13,8 +13,21 @@ export const createOrder = async (payload: {
   return data;
 };
 
-export const getMyOrders = async () => {
-  const { data } = await api.get("/api/orders");
+export const getMyOrders = async (params?: {
+  page?: number;
+  pageSize?: number;
+  period?: "all" | "1m" | "3m" | "6m";
+  keyword?: string;
+}) => {
+  const searchParams = new URLSearchParams();
+
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.pageSize) searchParams.set("pageSize", String(params.pageSize));
+  if (params?.period) searchParams.set("period", params.period);
+  if (params?.keyword?.trim()) searchParams.set("keyword", params.keyword.trim());
+
+  const query = searchParams.toString();
+  const { data } = await api.get(`/api/orders${query ? `?${query}` : ""}`);
   return data;
 };
 

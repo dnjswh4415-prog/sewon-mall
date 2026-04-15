@@ -29,6 +29,35 @@ type SortType =
 const API_BASE_URL = "http://localhost:5000";
 const TRANSLATION_CACHE_KEY = "sewon_translation_cache_v1";
 
+/**
+ * 여기 이름은 DB category.name과 맞춰줘야 정상 동작함
+ */
+const BIG_CATEGORY_TREE: Record<string, string[]> = {
+  입력장치: ["키보드", "마우스", "웹캠", "마이크", "게이밍액세서리"],
+  오디오: ["헤드셋", "이어폰", "스피커"],
+  "디스플레이/모바일": ["모니터", "노트북", "태블릿", "스마트폰", "스마트워치"],
+  "전원/케이블": ["충전기", "케이블", "보조배터리"],
+  "가구/생활": ["의자", "책상", "조명", "생활가전"],
+  PC부품: ["저장장치", "CPU", "메인보드", "그래픽카드", "RAM", "SSD", "케이스", "쿨러"],
+  "사무/네트워크": ["프린터", "공유기"],
+};
+
+const BIG_CATEGORY_LABELS: Record<
+  string,
+  {
+    ko: string;
+    ja: string;
+  }
+> = {
+  입력장치: { ko: "입력장치", ja: "入力機器" },
+  오디오: { ko: "오디오", ja: "オーディオ" },
+  "디스플레이/모바일": { ko: "디스플레이/모바일", ja: "ディスプレイ/モバイル" },
+  "전원/케이블": { ko: "전원/케이블", ja: "電源/ケーブル" },
+  "가구/생활": { ko: "가구/생활", ja: "家具/生活" },
+  PC부품: { ko: "PC부품", ja: "PCパーツ" },
+  "사무/네트워크": { ko: "사무/네트워크", ja: "事務/ネットワーク" },
+};
+
 const uiText = {
   ko: {
     favorite: "즐겨찾기",
@@ -45,6 +74,8 @@ const uiText = {
     mypage: "마이페이지",
     all: "전체보기",
     category: "카테고리",
+    bigCategory: "큰 카테고리",
+    subCategory: "하위 카테고리",
     close: "닫기",
     openCategory: "카테고리 열기",
     selectedCategory: "현재 선택 카테고리",
@@ -69,6 +100,7 @@ const uiText = {
     cartLoginRequired: "로그인 후에 장바구니에 추가 가능하십니다.",
     ordersLoginRequired: "로그인 후에 주문/배송 조회가 가능합니다.",
     favoriteHint: "즐겨찾기는 Ctrl + D를 누르면 추가할 수 있습니다.",
+    subAll: "하위 카테고리 전체",
   },
   ja: {
     favorite: "お気に入り",
@@ -85,6 +117,8 @@ const uiText = {
     mypage: "マイページ",
     all: "すべて",
     category: "カテゴリ",
+    bigCategory: "大カテゴリ",
+    subCategory: "小カテゴリ",
     close: "閉じる",
     openCategory: "カテゴリを開く",
     selectedCategory: "選択中のカテゴリ",
@@ -109,6 +143,7 @@ const uiText = {
     cartLoginRequired: "ログイン後にカートへ追加できます。",
     ordersLoginRequired: "ログイン後に注文/配送照会が可能です。",
     favoriteHint: "お気に入りは Ctrl + D で追加できます。",
+    subAll: "小カテゴリ全体",
   },
 } as const;
 
@@ -145,7 +180,6 @@ export default function HomePage() {
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
   const [categories, setCategories] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
@@ -157,6 +191,13 @@ export default function HomePage() {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [showCategoryPanel, setShowCategoryPanel] = useState(true);
 
+  const [selectedBigCategory, setSelectedBigCategory] = useState<string>(
+    Object.keys(BIG_CATEGORY_TREE)[0] || "생활용품"
+  );
+  const [selectedSubCategoryId, setSelectedSubCategoryId] = useState<
+    number | null
+  >(null);
+
   const [pageTranslating, setPageTranslating] = useState(false);
   const [translatedNames, setTranslatedNames] = useState<Record<number, string>>(
     {}
@@ -166,6 +207,13 @@ export default function HomePage() {
   >({});
 
   const t = uiText[language];
+
+  const bigCategories = useMemo(() => {
+    return Object.keys(BIG_CATEGORY_TREE);
+  }, []);
+
+  const translatedBigCategoryName =
+    BIG_CATEGORY_LABELS[selectedBigCategory]?.[language] || selectedBigCategory;
 
   const translateWithCache = async (
     text: string,
@@ -294,7 +342,6 @@ export default function HomePage() {
       setLoadingProducts(true);
 
       const data = await fetchProducts({
-        categoryId,
         keyword: search || undefined,
       });
 
@@ -315,14 +362,42 @@ export default function HomePage() {
 
   useEffect(() => {
     loadProducts();
-  }, [search, categoryId]);
+  }, [search]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, categoryId]);
+  }, [search, selectedBigCategory, selectedSubCategoryId]);
+
+  const currentSubCategories = useMemo(() => {
+    const targetNames = BIG_CATEGORY_TREE[selectedBigCategory] ?? [];
+    return categories.filter((cat) => targetNames.includes(cat.name));
+  }, [categories, selectedBigCategory]);
+
+  const filteredProducts = useMemo(() => {
+    const targetSubCategoryNames = new Set(
+      BIG_CATEGORY_TREE[selectedBigCategory] ?? []
+    );
+
+    return products.filter((product) => {
+      const productCategoryId = Number(
+        product?.Category?.id ?? product?.category?.id ?? 0
+      );
+      const productCategoryName =
+        product?.Category?.name || product?.category?.name || "";
+
+      const matchesBigCategory = targetSubCategoryNames.has(productCategoryName);
+
+      const matchesSubCategory =
+        selectedSubCategoryId == null
+          ? true
+          : productCategoryId === Number(selectedSubCategoryId);
+
+      return matchesBigCategory && matchesSubCategory;
+    });
+  }, [products, selectedBigCategory, selectedSubCategoryId]);
 
   const sortedProducts = useMemo(() => {
-    const copied = [...products];
+    const copied = [...filteredProducts];
 
     switch (sortBy) {
       case "priceAsc":
@@ -341,7 +416,7 @@ export default function HomePage() {
       default:
         return copied.sort((a, b) => Number(b.id) - Number(a.id));
     }
-  }, [products, sortBy]);
+  }, [filteredProducts, sortBy]);
 
   const pagedProducts = useMemo(() => {
     const start = (page - 1) * 20;
@@ -517,8 +592,14 @@ export default function HomePage() {
     setPage(1);
   };
 
-  const handleCategoryClick = (id?: number) => {
-    setCategoryId(id);
+  const handleBigCategoryClick = (bigCategory: string) => {
+    setSelectedBigCategory(bigCategory);
+    setSelectedSubCategoryId(null);
+    setPage(1);
+  };
+
+  const handleSubCategoryClick = (id: number | null) => {
+    setSelectedSubCategoryId(id);
     setPage(1);
   };
 
@@ -542,15 +623,22 @@ export default function HomePage() {
     router.push("/orders");
   };
 
-  const selectedCategoryName =
-    categories.find((cat) => cat.id === categoryId)?.name || uiText.ko.allProducts;
+  const selectedSubCategoryName =
+    currentSubCategories.find(
+      (cat) => Number(cat.id) === Number(selectedSubCategoryId)
+    )?.name || "";
 
-  const translatedSelectedCategoryName =
-    categoryId && translatedCategoryNames[categoryId]
-      ? translatedCategoryNames[categoryId]
+  const translatedSelectedSubCategoryName =
+    selectedSubCategoryId && translatedCategoryNames[selectedSubCategoryId]
+      ? translatedCategoryNames[selectedSubCategoryId]
+      : selectedSubCategoryName;
+
+  const currentCategoryLabel =
+    selectedSubCategoryId == null
+      ? `${translatedBigCategoryName}`
       : language === "ja"
-      ? uiText.ja.allProducts
-      : selectedCategoryName;
+      ? translatedSelectedSubCategoryName || translatedBigCategoryName
+      : selectedSubCategoryName || selectedBigCategory;
 
   if (!mounted) {
     return (
@@ -703,39 +791,27 @@ export default function HomePage() {
         </div>
       </header>
 
+      {/* 상단 큰 카테고리 */}
       <section className="bg-white border-y border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap gap-2">
-          <button
-            onClick={() => {
-              setSearchInput("");
-              setSearch("");
-              setCategoryId(undefined);
-              setPage(1);
-            }}
-            className={`px-4 py-2 rounded-full text-sm ${
-              !categoryId
-                ? "bg-black text-white"
-                : "bg-gray-100 hover:bg-gray-200"
-            }`}
-          >
-            {t.all}
-          </button>
+          {bigCategories.map((bigCategory) => {
+            const label =
+              BIG_CATEGORY_LABELS[bigCategory]?.[language] || bigCategory;
 
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => handleCategoryClick(cat.id)}
-              className={`px-4 py-2 rounded-full text-sm ${
-                categoryId === cat.id
-                  ? "bg-black text-white"
-                  : "bg-gray-100 hover:bg-gray-200"
-              }`}
-            >
-              {language === "ja"
-                ? translatedCategoryNames[cat.id] || cat.name
-                : cat.name}
-            </button>
-          ))}
+            return (
+              <button
+                key={bigCategory}
+                onClick={() => handleBigCategoryClick(bigCategory)}
+                className={`px-4 py-2 rounded-full text-sm ${
+                  selectedBigCategory === bigCategory
+                    ? "bg-black text-white"
+                    : "bg-gray-100 hover:bg-gray-200"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -745,7 +821,11 @@ export default function HomePage() {
             <aside className="hidden md:block w-64 shrink-0">
               <div className="bg-white rounded-2xl border border-gray-200 p-4 sticky top-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold">{t.category}</h3>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">{t.bigCategory}</p>
+                    <h3 className="text-lg font-bold">{translatedBigCategoryName}</h3>
+                  </div>
+
                   <button
                     onClick={() => setShowCategoryPanel(false)}
                     className="text-xs text-gray-500 hover:text-black"
@@ -754,24 +834,28 @@ export default function HomePage() {
                   </button>
                 </div>
 
+                <div className="mb-3">
+                  <p className="text-xs text-gray-500">{t.subCategory}</p>
+                </div>
+
                 <div className="space-y-2">
                   <button
-                    onClick={() => handleCategoryClick(undefined)}
+                    onClick={() => handleSubCategoryClick(null)}
                     className={`w-full text-left px-4 py-3 rounded-xl ${
-                      !categoryId
+                      selectedSubCategoryId == null
                         ? "bg-black text-white"
                         : "bg-gray-50 hover:bg-gray-100 border border-gray-200"
                     }`}
                   >
-                    {t.all}
+                    {t.subAll}
                   </button>
 
-                  {categories.map((cat) => (
+                  {currentSubCategories.map((cat) => (
                     <button
                       key={cat.id}
-                      onClick={() => handleCategoryClick(cat.id)}
+                      onClick={() => handleSubCategoryClick(Number(cat.id))}
                       className={`w-full text-left px-4 py-3 rounded-xl ${
-                        categoryId === cat.id
+                        selectedSubCategoryId === Number(cat.id)
                           ? "bg-black text-white"
                           : "bg-gray-50 hover:bg-gray-100 border border-gray-200"
                       }`}
@@ -802,11 +886,7 @@ export default function HomePage() {
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                   <p className="text-sm text-gray-500">{t.selectedCategory}</p>
-                  <h3 className="text-2xl font-bold">
-                    {language === "ja"
-                      ? translatedSelectedCategoryName
-                      : selectedCategoryName}
-                  </h3>
+                  <h3 className="text-2xl font-bold">{currentCategoryLabel}</h3>
                   {search && (
                     <p className="text-sm text-gray-500 mt-1">
                       {t.searchKeyword}:{" "}
@@ -851,8 +931,8 @@ export default function HomePage() {
                     language === "ja"
                       ? translatedCategoryNames[product.Category?.id] ||
                         product.Category?.name ||
-                        translatedSelectedCategoryName
-                      : product.Category?.name || selectedCategoryName;
+                        translatedBigCategoryName
+                      : product.Category?.name || selectedBigCategory;
 
                   return (
                     <div
