@@ -63,16 +63,40 @@ export class OrderController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  async getMyOrdersRoot(@Req() req: any) {
+  async getMyOrdersRoot(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('period') period?: string,
+    @Query('keyword') keyword?: string,
+  ) {
     const userId = this.getUserId(req);
-    return this.orderService.getMyOrders(userId);
+
+    return this.orderService.getMyOrders(userId, {
+      page,
+      pageSize,
+      period,
+      keyword,
+    });
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('my')
-  async getMyOrders(@Req() req: any) {
+  async getMyOrders(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('period') period?: string,
+    @Query('keyword') keyword?: string,
+  ) {
     const userId = this.getUserId(req);
-    return this.orderService.getMyOrders(userId);
+
+    return this.orderService.getMyOrders(userId, {
+      page,
+      pageSize,
+      period,
+      keyword,
+    });
   }
 
   @UseGuards(JwtAuthGuard, AdminGuard)

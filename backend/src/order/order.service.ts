@@ -13,6 +13,13 @@ interface OrderItemInput {
   price?: number;
 }
 
+interface GetMyOrdersQuery {
+  page?: string;
+  pageSize?: string;
+  period?: string;
+  keyword?: string;
+}
+
 @Injectable()
 export class OrderService {
   constructor(private readonly prisma: PrismaService) {}
@@ -20,6 +27,41 @@ export class OrderService {
   private generateOrderNumber(userId: number) {
     const random = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `ORD-${Date.now()}-${userId}-${random}`;
+  }
+
+  private parsePage(raw?: string) {
+    const page = Number(raw ?? 1);
+    return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+  }
+
+  private parsePageSize(raw?: string) {
+    const pageSize = Number(raw ?? 20);
+    if (!Number.isFinite(pageSize) || pageSize < 1) return 20;
+    return Math.min(Math.floor(pageSize), 50);
+  }
+
+  private getPeriodStart(period?: string) {
+    const now = new Date();
+
+    if (period === '1m') {
+      const date = new Date(now);
+      date.setMonth(date.getMonth() - 1);
+      return date;
+    }
+
+    if (period === '3m') {
+      const date = new Date(now);
+      date.setMonth(date.getMonth() - 3);
+      return date;
+    }
+
+    if (period === '6m') {
+      const date = new Date(now);
+      date.setMonth(date.getMonth() - 6);
+      return date;
+    }
+
+    return null;
   }
 
   async createOrder(
@@ -241,35 +283,168 @@ export class OrderService {
     });
   }
 
-  async getMyOrders(userId: number) {
-    return this.prisma.order.findMany({
-      where: { userId: Number(userId) },
-      include: {
-        address: true,
-        items: {
-          include: {
-            product: true,
-            variant: {
-              include: {
-                options: {
-                  include: {
-                    value: {
-                      include: {
-                        option: true,
+  async getMyOrders(userId: number, query?: GetMyOrdersQuery) {
+    const normalizedUserId = Number(userId);
+    const page = this.parsePage(query?.page);
+    const pageSize = this.parsePageSize(query?.pageSize);
+    const keyword = String(query?.keyword ?? '').trim();
+    const period = String(query?.period ?? 'all');
+    const periodStart = this.getPeriodStart(period);
+
+    const where: Prisma.OrderWhereInput = {
+      userId: normalizedUserId,
+    };
+
+    const andConditions: Prisma.OrderWhereInput[] = [];
+
+    if (periodStart) {
+      andConditions.push({
+        createdAt: {
+          gte: periodStart,
+        },
+      });
+    }
+
+    if (keyword) {
+      andConditions.push({
+        OR: [
+          {
+            orderNumber: {
+              contains: keyword,
+            },
+          },
+          {
+            address: {
+              recipient: {
+                contains: keyword,
+              },
+            },
+          },
+          {
+            items: {
+              some: {
+                product: {
+                  name: {
+                    contains: keyword,
+                  },
+                },
+              },
+            },
+          },
+          {
+            items: {
+              some: {
+                variant: {
+                  sku: {
+                    contains: keyword,
+                  },
+                },
+              },
+            },
+          },
+          {
+            items: {
+              some: {
+                variant: {
+                  options: {
+                    some: {
+                      value: {
+                        value: {
+                          contains: keyword,
+                        },
                       },
                     },
                   },
                 },
               },
             },
-            reviews: true,
+          },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
+
+    const [orders, totalCount] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          orderNumber: true,
+          totalPrice: true,
+          status: true,
+          createdAt: true,
+          deliveryCompany: true,
+          trackingNumber: true,
+          items: {
+            orderBy: {
+              id: 'asc',
+            },
+            select: {
+              id: true,
+              quantity: true,
+              price: true,
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  imageUrl: true,
+                },
+              },
+              variant: {
+                select: {
+                  id: true,
+                  sku: true,
+                  options: {
+                    select: {
+                      id: true,
+                      value: {
+                        select: {
+                          id: true,
+                          value: true,
+                          option: {
+                            select: {
+                              id: true,
+                              name: true,
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              reviews: {
+                select: {
+                  id: true,
+                  rating: true,
+                },
+              },
+            },
           },
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+      }),
+      this.prisma.order.count({
+        where,
+      }),
+    ]);
+
+    return {
+      items: orders,
+      page,
+      pageSize,
+      totalCount,
+      totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+      period,
+      keyword,
+    };
   }
 
   async getOrderDetail(userId: number, orderId: number) {
