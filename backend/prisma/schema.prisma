@@ -81,6 +81,8 @@ model Product {
   options        ProductOption[] //  옵션
   stockHistories StockHistory[] //  재고 로그
 
+  detailImages ProductDetailImage[]//디테일 이미지
+
   @@index([createdAt])
   @@index([categoryId, createdAt])
   @@index([stock])
@@ -102,6 +104,23 @@ model ProductImage {
   createdAt DateTime @default(now()) // 이미지 등록 날짜
 
   @@index([productId]) // 상품 기준 이미지 조회 성능 향상
+}
+//////////////////////////////////////////////////
+// PRODUCT DetailImage
+// 상품 이미지 (여러장 지원)
+//////////////////////////////////////////////////
+
+model ProductDetailImage {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  imageUrl  String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([productId, sortOrder])
 }
 
 //////////////////////////////////////////////////

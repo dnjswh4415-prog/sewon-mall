@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsInt,
   IsOptional,
   IsString,
@@ -33,4 +34,9 @@ export class CreateProductDto {
   @IsInt()
   @Min(1)
   categoryId?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  detailImageUrls?: string[];
 }

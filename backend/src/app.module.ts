@@ -16,6 +16,7 @@ import { ReviewModule } from './review/review.module';
 import { StockModule } from './stock/stock.module';
 import { AdminModule } from './admin/admin.module';
 import { TranslateModule } from './translate/translate.module';
+import { PayPayModule } from './paypay/paypay.module';
 
 
 @Module({
@@ -35,6 +36,7 @@ import { TranslateModule } from './translate/translate.module';
     ScheduleModule.forRoot(),
     AdminModule,
     TranslateModule,
+    PayPayModule,
   ],
   controllers: [AppController],
   providers: [AppService],
