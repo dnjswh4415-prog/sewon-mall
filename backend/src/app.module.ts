@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AddressModule } from './address/address.module';
@@ -19,9 +22,14 @@ import { TranslateModule } from './translate/translate.module';
 import { PayPayModule } from './paypay/paypay.module';
 import { ExchangeRateModule } from './exchange-rate/exchange-rate.module';
 
-
 @Module({
   imports: [
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: 20,
+      },
+    ]),
     PrismaModule,
     AuthModule,
     OrderModule,
@@ -41,6 +49,12 @@ import { ExchangeRateModule } from './exchange-rate/exchange-rate.module';
     ExchangeRateModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

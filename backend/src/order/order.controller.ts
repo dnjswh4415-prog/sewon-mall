@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -107,33 +108,36 @@ export class OrderController {
 
   @UseGuards(JwtAuthGuard, AdminGuard)
   @Get('admin/:id')
-  async getAdminOrderDetail(@Param('id') id: string) {
-    return this.orderService.getAdminOrderDetail(Number(id));
+  async getAdminOrderDetail(@Param('id', ParseIntPipe) id: number) {
+    return this.orderService.getAdminOrderDetail(id);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get(':id')
-  async getOrderDetail(@Req() req: any, @Param('id') id: string) {
+  async getOrderDetail(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
     const userId = this.getUserId(req);
-    return this.orderService.getOrderDetail(userId, Number(id));
+    return this.orderService.getOrderDetail(userId, id);
   }
 
   @UseGuards(JwtAuthGuard)
   @Patch(':id/cancel')
-  async cancelOrder(@Req() req: any, @Param('id') id: string) {
+  async cancelOrder(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
     const userId = this.getUserId(req);
-    return this.orderService.cancelOrder(userId, Number(id));
+    return this.orderService.cancelOrder(userId, id);
   }
 
   @UseGuards(JwtAuthGuard, AdminGuard)
   @Patch(':id/ship')
-  async shipOrder(@Param('id') id: string, @Body() body: any) {
+  async shipOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: any,
+  ) {
     if (!body?.deliveryCompany || !body?.trackingNumber) {
       throw new BadRequestException('택배사와 송장번호를 입력하세요.');
     }
 
     return this.orderService.startShipping(
-      Number(id),
+      id,
       String(body.deliveryCompany),
       String(body.trackingNumber),
     );
@@ -141,7 +145,7 @@ export class OrderController {
 
   @UseGuards(JwtAuthGuard, AdminGuard)
   @Patch(':id/deliver')
-  async deliverOrder(@Param('id') id: string) {
-    return this.orderService.completeDelivery(Number(id));
+  async deliverOrder(@Param('id', ParseIntPipe) id: number) {
+    return this.orderService.completeDelivery(id);
   }
 }

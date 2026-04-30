@@ -1,15 +1,16 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Put,
   Req,
   UseGuards,
-  BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AddressService } from './address.service';
@@ -21,66 +22,50 @@ import { UpdateAddressDto } from './dto/update-address.dto';
 export class AddressController {
   constructor(private readonly addressService: AddressService) {}
 
-  @Get()
-  getMyAddresses(@Req() req: any) {
-    const userId = req.user?.sub;
+  private getUserId(req: any) {
+    const userId = Number(req.user?.id ?? req.user?.userId ?? req.user?.sub);
 
-    if (!userId) {
+    if (!Number.isInteger(userId) || userId < 1) {
       throw new BadRequestException('로그인 정보가 없습니다.');
     }
 
-    return this.addressService.getMyAddresses(Number(userId));
+    return userId;
+  }
+
+  @Get()
+  getMyAddresses(@Req() req: any) {
+    const userId = this.getUserId(req);
+    return this.addressService.getMyAddresses(userId);
   }
 
   @Post()
   createAddress(@Req() req: any, @Body() dto: CreateAddressDto) {
-    const userId = req.user?.sub;
-
-    if (!userId) {
-      throw new BadRequestException('로그인 정보가 없습니다.');
-    }
-
-    return this.addressService.createAddress(Number(userId), dto);
+    const userId = this.getUserId(req);
+    return this.addressService.createAddress(userId, dto);
   }
 
   @Put(':id')
   updateAddress(
     @Req() req: any,
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateAddressDto,
   ) {
-    const userId = req.user?.sub;
-
-    if (!userId) {
-      throw new BadRequestException('로그인 정보가 없습니다.');
-    }
-
-    return this.addressService.updateAddress(
-      Number(userId),
-      Number(id),
-      dto,
-    );
+    const userId = this.getUserId(req);
+    return this.addressService.updateAddress(userId, id, dto);
   }
 
   @Patch(':id/default')
-  setDefaultAddress(@Req() req: any, @Param('id') id: string) {
-    const userId = req.user?.sub;
-
-    if (!userId) {
-      throw new BadRequestException('로그인 정보가 없습니다.');
-    }
-
-    return this.addressService.setDefaultAddress(Number(userId), Number(id));
+  setDefaultAddress(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const userId = this.getUserId(req);
+    return this.addressService.setDefaultAddress(userId, id);
   }
 
   @Delete(':id')
-  deleteAddress(@Req() req: any, @Param('id') id: string) {
-    const userId = req.user?.sub;
-
-    if (!userId) {
-      throw new BadRequestException('로그인 정보가 없습니다.');
-    }
-
-    return this.addressService.deleteAddress(Number(userId), Number(id));
+  deleteAddress(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
+    const userId = this.getUserId(req);
+    return this.addressService.deleteAddress(userId, id);
   }
 }
