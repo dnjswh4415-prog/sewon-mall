@@ -17,6 +17,7 @@ import { StockModule } from './stock/stock.module';
 import { AdminModule } from './admin/admin.module';
 import { TranslateModule } from './translate/translate.module';
 import { PayPayModule } from './paypay/paypay.module';
+import { ExchangeRateModule } from './exchange-rate/exchange-rate.module';
 
 
 @Module({
@@ -37,6 +38,7 @@ import { PayPayModule } from './paypay/paypay.module';
     AdminModule,
     TranslateModule,
     PayPayModule,
+    ExchangeRateModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,6 +9,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ProductService } from './product.service';
@@ -20,6 +22,10 @@ import { UpdateProductDto } from './dto/update-product.dto';
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
+  private getUserId(req: any) {
+    return Number(req.user?.id ?? req.user?.userId ?? req.user?.sub);
+  }
+
   @Get()
   getProducts(
     @Query('categoryId') categoryId?: string,
@@ -29,6 +35,50 @@ export class ProductController {
       categoryId: categoryId ? Number(categoryId) : undefined,
       keyword,
     });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('recommendations/me')
+  getRecommendationsByUser(
+    @Req() req: any,
+    @Query('limit') limit?: string,
+  ) {
+    const userId = this.getUserId(req);
+
+    if (!userId) {
+      throw new BadRequestException('로그인 정보가 없습니다.');
+    }
+
+    return this.productService.getBfsRecommendationsByUser(
+      userId,
+      limit ? Number(limit) : 8,
+    );
+  }
+
+  @Get(':id/recommendations')
+  getRecommendationsByProduct(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('limit') limit?: string,
+  ) {
+    return this.productService.getBfsRecommendationsByProduct(
+      id,
+      limit ? Number(limit) : 8,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/view')
+  recordView(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const userId = this.getUserId(req);
+
+    if (!userId) {
+      throw new BadRequestException('로그인 정보가 없습니다.');
+    }
+
+    return this.productService.recordProductView(userId, id);
   }
 
   @Get(':id')

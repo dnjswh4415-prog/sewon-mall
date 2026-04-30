@@ -1,35 +1,170 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { expandSearchKeywords } from './search-keyword-map';
 
 @Injectable()
 export class ProductService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async getProducts(params?: { categoryId?: number; keyword?: string }) {
-    const where: Prisma.ProductWhereInput = {};
+  private enrichProductSummary(product: any) {
+    const reviewCount = product.reviews.length;
+    const avgRating =
+      reviewCount > 0
+        ? product.reviews.reduce((sum: number, r: any) => sum + r.rating, 0) /
+          reviewCount
+        : 0;
 
-    if (params?.categoryId) {
-      where.categoryId = Number(params.categoryId);
+    return {
+      ...product,
+      avgRating,
+      reviewCount,
+    };
+  }
+
+  private getProductPrice(product: any) {
+    const variantPrices =
+      product?.variants
+        ?.filter((variant: any) => variant?.isActive)
+        ?.map((variant: any) => Number(variant?.price ?? 0))
+        ?.filter((price: number) => Number.isFinite(price) && price > 0) ?? [];
+
+    if (variantPrices.length > 0) {
+      return Math.min(...variantPrices);
     }
 
-    if (params?.keyword) {
-      where.name = {
-        contains: params.keyword,
-      };
+    return Number(product?.price ?? 0);
+  }
+
+  private getProductOptionTokens(product: any): string[] {
+    const tokens = new Set<string>();
+
+    for (const option of product?.options ?? []) {
+      if (option?.name) {
+        tokens.add(`option:${String(option.name).trim().toLowerCase()}`);
+      }
+
+      for (const value of option?.values ?? []) {
+        if (value?.value) {
+          tokens.add(`value:${String(value.value).trim().toLowerCase()}`);
+        }
+      }
     }
 
+    return [...tokens];
+  }
+
+  private calculateRelationScore(base: any, target: any): number {
+    let score = 0;
+
+    if (Number(base.id) === Number(target.id)) {
+      return 0;
+    }
+
+    if (
+      base.categoryId != null &&
+      target.categoryId != null &&
+      Number(base.categoryId) === Number(target.categoryId)
+    ) {
+      score += 5;
+    }
+
+    const baseTokens = new Set(this.getProductOptionTokens(base));
+    const targetTokens = this.getProductOptionTokens(target);
+
+    for (const token of targetTokens) {
+      if (baseTokens.has(token)) {
+        score += token.startsWith('value:') ? 2 : 1;
+      }
+    }
+
+    const basePrice = this.getProductPrice(base);
+    const targetPrice = this.getProductPrice(target);
+
+    if (basePrice > 0 && targetPrice > 0) {
+      const diffRatio = Math.abs(basePrice - targetPrice) / basePrice;
+
+      if (diffRatio <= 0.15) {
+        score += 3;
+      } else if (diffRatio <= 0.3) {
+        score += 2;
+      } else if (diffRatio <= 0.5) {
+        score += 1;
+      }
+    }
+
+    return score;
+  }
+
+  private buildProductGraph(products: any[]) {
+    const graph = new Map<number, Array<{ id: number; score: number }>>();
+
+    for (const product of products) {
+      graph.set(Number(product.id), []);
+    }
+
+    for (let i = 0; i < products.length; i += 1) {
+      for (let j = i + 1; j < products.length; j += 1) {
+        const a = products[i];
+        const b = products[j];
+
+        const score = this.calculateRelationScore(a, b);
+
+        if (score >= 4) {
+          graph.get(Number(a.id))?.push({ id: Number(b.id), score });
+          graph.get(Number(b.id))?.push({ id: Number(a.id), score });
+        }
+      }
+    }
+
+    for (const [, neighbors] of graph) {
+      neighbors.sort((x, y) => y.score - x.score);
+    }
+
+    return graph;
+  }
+
+  private async getRecommendationBaseProducts() {
     const products = await this.prisma.product.findMany({
-      where,
       include: {
         Category: true,
         reviews: true,
-        images: true,
-        variants: {
-          where: { isActive: true },
+        images: {
+          orderBy: {
+            sortOrder: 'asc',
+          },
+        },
+        detailImages: {
+          orderBy: {
+            sortOrder: 'asc',
+          },
+        },
+        regionalPrices: {
+          where: {
+            isActive: true,
+          },
+        },
+        options: {
           include: {
+            values: true,
+          },
+        },
+        variants: {
+          where: {
+            isActive: true,
+          },
+          include: {
+            regionalPrices: {
+              where: {
+                isActive: true,
+              },
+            },
             options: {
               include: {
                 value: {
@@ -40,6 +175,9 @@ export class ProductService {
               },
             },
           },
+          orderBy: {
+            id: 'asc',
+          },
         },
       },
       orderBy: {
@@ -47,19 +185,135 @@ export class ProductService {
       },
     });
 
-    return products.map((product) => {
-      const reviewCount = product.reviews.length;
-      const avgRating =
-        reviewCount > 0
-          ? product.reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount
-          : 0;
+    return products;
+  }
 
-      return {
-        ...product,
-        avgRating,
-        reviewCount,
-      };
+  async getProducts(params?: { categoryId?: number; keyword?: string }) {
+    const keywords = expandSearchKeywords(params?.keyword);
+
+    const andConditions: Prisma.ProductWhereInput[] = [];
+
+    if (params?.categoryId) {
+      andConditions.push({
+        categoryId: Number(params.categoryId),
+      });
+    }
+
+    if (keywords.length > 0) {
+      const searchOr: Prisma.ProductWhereInput[] = keywords.flatMap(
+        (keyword) => [
+          {
+            name: {
+              contains: keyword,
+            },
+          },
+          {
+            description: {
+              contains: keyword,
+            },
+          },
+          {
+            Category: {
+              is: {
+                name: {
+                  contains: keyword,
+                },
+              },
+            },
+          },
+          {
+            options: {
+              some: {
+                name: {
+                  contains: keyword,
+                },
+              },
+            },
+          },
+          {
+            options: {
+              some: {
+                values: {
+                  some: {
+                    value: {
+                      contains: keyword,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      );
+
+      andConditions.push({
+        OR: searchOr,
+      });
+    }
+
+    const where: Prisma.ProductWhereInput =
+      andConditions.length > 0
+        ? {
+            AND: andConditions,
+          }
+        : {};
+
+    const products = await this.prisma.product.findMany({
+      where,
+      include: {
+        Category: true,
+        reviews: true,
+        images: {
+          orderBy: {
+            sortOrder: 'asc',
+          },
+        },
+        detailImages: {
+          orderBy: {
+            sortOrder: 'asc',
+          },
+        },
+        regionalPrices: {
+          where: {
+            isActive: true,
+          },
+        },
+        options: {
+          include: {
+            values: true,
+          },
+        },
+        variants: {
+          where: {
+            isActive: true,
+          },
+          include: {
+            regionalPrices: {
+              where: {
+                isActive: true,
+              },
+            },
+            options: {
+              include: {
+                value: {
+                  include: {
+                    option: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            id: 'asc',
+          },
+        },
+      },
+      orderBy: {
+        id: 'desc',
+      },
     });
+
+    return products.map((product) => this.enrichProductSummary(product));
   }
 
   async getProductById(id: number) {
@@ -91,6 +345,11 @@ export class ProductService {
             sortOrder: 'asc',
           },
         },
+        regionalPrices: {
+          where: {
+            isActive: true,
+          },
+        },
         options: {
           include: {
             values: true,
@@ -99,6 +358,11 @@ export class ProductService {
         variants: {
           where: { isActive: true },
           include: {
+            regionalPrices: {
+              where: {
+                isActive: true,
+              },
+            },
             options: {
               include: {
                 value: {
@@ -120,17 +384,145 @@ export class ProductService {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
     }
 
-    const reviewCount = product.reviews.length;
-    const avgRating =
-      reviewCount > 0
-        ? product.reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount
-        : 0;
+    return this.enrichProductSummary(product);
+  }
 
-    return {
-      ...product,
-      avgRating,
-      reviewCount,
-    };
+  async recordProductView(userId: number, productId: number) {
+    const normalizedUserId = Number(userId);
+    const normalizedProductId = Number(productId);
+
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId < 1) {
+      throw new BadRequestException('유효하지 않은 사용자입니다.');
+    }
+
+    const product = await this.prisma.product.findUnique({
+      where: { id: normalizedProductId },
+      select: { id: true },
+    });
+
+    if (!product) {
+      throw new NotFoundException('상품을 찾을 수 없습니다.');
+    }
+
+    return this.prisma.productViewHistory.create({
+      data: {
+        userId: normalizedUserId,
+        productId: normalizedProductId,
+      },
+    });
+  }
+
+  async getBfsRecommendationsByProduct(productId: number, limit = 8) {
+    const normalizedProductId = Number(productId);
+    const products = await this.getRecommendationBaseProducts();
+
+    const baseProduct = products.find(
+      (product) => Number(product.id) === normalizedProductId,
+    );
+
+    if (!baseProduct) {
+      throw new NotFoundException('기준 상품을 찾을 수 없습니다.');
+    }
+
+    const graph = this.buildProductGraph(products);
+    const visited = new Set<number>([normalizedProductId]);
+    const queue: number[] = [normalizedProductId];
+    const recommendedIds: number[] = [];
+
+    while (queue.length > 0 && recommendedIds.length < limit) {
+      const currentId = queue.shift()!;
+      const neighbors = graph.get(currentId) ?? [];
+
+      for (const neighbor of neighbors) {
+        if (visited.has(neighbor.id)) continue;
+
+        visited.add(neighbor.id);
+        queue.push(neighbor.id);
+
+        if (neighbor.id !== normalizedProductId) {
+          recommendedIds.push(neighbor.id);
+        }
+
+        if (recommendedIds.length >= limit) break;
+      }
+    }
+
+    const recommendedProducts = recommendedIds
+      .map((id) => products.find((product) => Number(product.id) === id))
+      .filter(Boolean)
+      .slice(0, limit);
+
+    return recommendedProducts.map((product: any) =>
+      this.enrichProductSummary(product),
+    );
+  }
+
+  async getBfsRecommendationsByUser(userId: number, limit = 8) {
+    const normalizedUserId = Number(userId);
+
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId < 1) {
+      throw new BadRequestException('유효하지 않은 사용자입니다.');
+    }
+
+    const recentViews = await this.prisma.productViewHistory.findMany({
+      where: {
+        userId: normalizedUserId,
+      },
+      orderBy: {
+        viewedAt: 'desc',
+      },
+      take: 50,
+    });
+
+    if (recentViews.length === 0) {
+      return [];
+    }
+
+    const frequencyMap = new Map<number, number>();
+
+    for (const view of recentViews) {
+      const current = frequencyMap.get(Number(view.productId)) ?? 0;
+      frequencyMap.set(Number(view.productId), current + 1);
+    }
+
+    const seedIds = [...frequencyMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([productId]) => productId);
+
+    const products = await this.getRecommendationBaseProducts();
+    const graph = this.buildProductGraph(products);
+
+    const visited = new Set<number>(seedIds);
+    const queue: number[] = [...seedIds];
+    const recommendedIds: number[] = [];
+
+    while (queue.length > 0 && recommendedIds.length < limit) {
+      const currentId = queue.shift()!;
+      const neighbors = graph.get(currentId) ?? [];
+
+      for (const neighbor of neighbors) {
+        if (visited.has(neighbor.id)) continue;
+
+        visited.add(neighbor.id);
+        queue.push(neighbor.id);
+
+        if (!seedIds.includes(neighbor.id)) {
+          recommendedIds.push(neighbor.id);
+        }
+
+        if (recommendedIds.length >= limit) break;
+      }
+    }
+
+    const recommendedProducts = recommendedIds
+      .map((id) => products.find((product) => Number(product.id) === id))
+      .filter(Boolean)
+      .slice(0, limit);
+
+    return recommendedProducts.map((product: any) =>
+      this.enrichProductSummary(product),
+    );
   }
 
   async createProduct(dto: CreateProductDto) {
@@ -165,6 +557,11 @@ export class ProductService {
           detailImages: {
             orderBy: {
               sortOrder: 'asc',
+            },
+          },
+          regionalPrices: {
+            where: {
+              isActive: true,
             },
           },
         },
@@ -221,6 +618,11 @@ export class ProductService {
           detailImages: {
             orderBy: {
               sortOrder: 'asc',
+            },
+          },
+          regionalPrices: {
+            where: {
+              isActive: true,
             },
           },
         },

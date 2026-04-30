@@ -8,6 +8,14 @@ import { deleteReview } from "@/src/api/review";
 import DeliveryProgress from "@/src/components/DeliveryProgress";
 import PageTopActions from "@/src/components/PageTopActions";
 import { useJapanesePageTranslation } from "@/src/hooks/useJapanesePageTranslation";
+const API_BASE_URL = "http://localhost:5000";
+
+const normalizeImageUrl = (url?: string | null) => {
+  if (!url) return "/no-image.png";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("/")) return `${API_BASE_URL}${url}`;
+  return `${API_BASE_URL}/${url}`;
+};
 
 const statusLabelMap = {
   ko: {
@@ -438,9 +446,9 @@ export default function OrdersPage() {
                                   <div className="flex items-center gap-4 min-w-0">
                                     <div className="w-16 h-16 rounded-xl overflow-hidden bg-white border border-gray-200 shrink-0">
                                       {item.product?.imageUrl ? (
-                                        <img
-                                          src={item.product.imageUrl}
-                                          alt={item.product?.name || t.noImage}
+                                      <img
+                                          src={normalizeImageUrl(item.product?.imageUrl)}
+                                          alt={item.product?.name || "상품 이미지"}
                                           className="w-full h-full object-cover"
                                           onError={(e) => {
                                             e.currentTarget.src = "/no-image.png";

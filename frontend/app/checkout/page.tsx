@@ -7,6 +7,7 @@ import { getCart } from "@/src/api/cart";
 import { createOrder } from "@/src/api/orders";
 import { getAddresses, createAddress } from "@/src/api/address";
 import { useJapanesePageTranslation } from "@/src/hooks/useJapanesePageTranslation";
+import { createPayPayCode } from "@/src/api/paypay";
 
 const TOSS_CLIENT_KEY = "test_ck_E92LAa5PVbq2QDQozOB937YmpXyJ";
 const DAUM_POSTCODE_SCRIPT =
@@ -14,6 +15,7 @@ const DAUM_POSTCODE_SCRIPT =
 
 const CHECKOUT_ORDER_KEY = "sewon_checkout_client_order_key";
 const CHECKOUT_CART_SIGNATURE_KEY = "sewon_checkout_cart_signature";
+const PAYPAY_MERCHANT_PAYMENT_ID_KEY = "sewon_paypay_merchant_payment_id";
 
 declare global {
   interface Window {
@@ -65,9 +67,10 @@ const pageText = {
     quantityUnit: "수량",
     totalPayment: "총 결제 금액",
     payButton: "토스페이 결제하기",
+    payPayButton: "PayPay로 결제하기",
     payingButton: "결제 요청 중...",
     postcodeLoadFail: "우편번호 서비스를 불러오지 못했습니다.",
-    orderLoadFail: "주문서 정보를 불러오지 못했습니다.",
+    orderLoadFail: "주문서 정보를 불러오는 데 실패했습니다.",
     recipientRequired: "받는 분 이름을 입력해주세요.",
     phoneRequired: "연락처를 입력해주세요.",
     zipcodeRequired: "우편번호를 입력해주세요.",
@@ -77,6 +80,7 @@ const pageText = {
     selectAddress: "배송지를 선택하거나 먼저 등록해주세요.",
     emptyCart: "장바구니에 상품이 없습니다.",
     paymentFailed: "결제 요청에 실패했습니다.",
+    payPayLinkFailed: "PayPay 결제 링크를 받지 못했습니다.",
     orderNameFallback: "주문상품",
     customerFallback: "고객",
   },
@@ -104,9 +108,10 @@ const pageText = {
     quantityUnit: "数量",
     totalPayment: "合計お支払い金額",
     payButton: "Toss Payで決済する",
+    payPayButton: "PayPayで決済する",
     payingButton: "決済リクエスト中...",
     postcodeLoadFail: "郵便番号サービスを読み込めませんでした。",
-    orderLoadFail: "注文書情報を読み込めませんでした。",
+    orderLoadFail: "注文書情報の読み込みに失敗しました。",
     recipientRequired: "受取人名を入力してください。",
     phoneRequired: "連絡先を入力してください。",
     zipcodeRequired: "郵便番号を入力してください。",
@@ -116,6 +121,7 @@ const pageText = {
     selectAddress: "配送先を選択するか先に登録してください。",
     emptyCart: "カートに商品がありません。",
     paymentFailed: "決済リクエストに失敗しました。",
+    payPayLinkFailed: "PayPay決済リンクを受け取れませんでした。",
     orderNameFallback: "注文商品",
     customerFallback: "お客様",
   },
@@ -333,6 +339,7 @@ export default function CheckoutPage() {
 
         if (savedSignature !== nextSignature) {
           sessionStorage.removeItem(CHECKOUT_ORDER_KEY);
+          sessionStorage.removeItem(PAYPAY_MERCHANT_PAYMENT_ID_KEY);
           sessionStorage.setItem(CHECKOUT_CART_SIGNATURE_KEY, nextSignature);
         }
       }
@@ -432,19 +439,7 @@ export default function CheckoutPage() {
     }
   };
 
-  const handlePayment = async () => {
-    if (isPaying) return;
-
-    if (!selectedAddressId) {
-      alert(pt.selectAddress);
-      return;
-    }
-
-    if (!cartItems.length) {
-      alert(pt.emptyCart);
-      return;
-    }
-
+  const createPendingOrder = async () => {
     const payloadItems = cartItems.map((item: any) => ({
       cartItemId: item.id,
       productId: getResolvedProductId(item),
@@ -463,34 +458,64 @@ export default function CheckoutPage() {
     console.table(payloadItems);
     console.log("checkout totalPrice (front)", totalPrice);
 
+    const clientOrderKey = getOrCreateClientOrderKey();
+    console.log("clientOrderKey", clientOrderKey);
+
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(
+        CHECKOUT_CART_SIGNATURE_KEY,
+        makeCartSignature(cartItems)
+      );
+    }
+
+    const orderPayload = {
+      addressId: Number(selectedAddressId),
+      clientOrderKey,
+      items: cartItems.map((item: any) => ({
+        productId: getResolvedProductId(item),
+        variantId: getResolvedVariantId(item),
+        quantity: Number(item.quantity),
+      })),
+    };
+
+    console.log("createOrder payload", orderPayload);
+
+    const order = await createOrder(orderPayload);
+
+    console.log("order.totalPrice (server)", Number(order.totalPrice));
+    console.log("order.orderNumber (server)", order.orderNumber);
+    console.log("front vs server diff", {
+      frontTotalPrice: Number(totalPrice),
+      serverTotalPrice: Number(order.totalPrice),
+      diff: Number(order.totalPrice) - Number(totalPrice),
+    });
+
+    return order;
+  };
+
+  const validateCheckout = () => {
+    if (isPaying) return false;
+
+    if (!selectedAddressId) {
+      alert(pt.selectAddress);
+      return false;
+    }
+
+    if (!cartItems.length) {
+      alert(pt.emptyCart);
+      return false;
+    }
+
+    return true;
+  };
+
+  const handlePayment = async () => {
+    if (!validateCheckout()) return;
+
     try {
       setIsPaying(true);
 
-      const clientOrderKey = getOrCreateClientOrderKey();
-      console.log("clientOrderKey", clientOrderKey);
-
-      const orderPayload = {
-        addressId: Number(selectedAddressId),
-        clientOrderKey,
-        items: cartItems.map((item: any) => ({
-          productId: getResolvedProductId(item),
-          variantId: getResolvedVariantId(item),
-          quantity: Number(item.quantity),
-        })),
-      };
-
-      console.log("createOrder payload", orderPayload);
-
-      const order = await createOrder(orderPayload);
-
-      console.log("order.totalPrice (server)", Number(order.totalPrice));
-      console.log("order.orderNumber (server)", order.orderNumber);
-      console.log("front vs server diff", {
-        frontTotalPrice: Number(totalPrice),
-        serverTotalPrice: Number(order.totalPrice),
-        diff: Number(order.totalPrice) - Number(totalPrice),
-      });
-
+      const order = await createPendingOrder();
       const tossPayments = await loadTossPayments(TOSS_CLIENT_KEY);
 
       await tossPayments.requestPayment("카드", {
@@ -501,11 +526,63 @@ export default function CheckoutPage() {
             ? `${cartItems[0].product?.name} 외 ${cartItems.length - 1}건`
             : cartItems[0].product?.name || pt.orderNameFallback,
         customerName: selectedAddress?.recipient || pt.customerFallback,
-        successUrl: "http://localhost:3000/payment/success",
-        failUrl: "http://localhost:3000/payment/fail",
+        successUrl: `${window.location.origin}/payment/success`,
+        failUrl: `${window.location.origin}/payment/fail`,
       });
     } catch (error: any) {
       console.error("결제 요청 실패:", error);
+      alert(error?.response?.data?.message || error?.message || pt.paymentFailed);
+      setIsPaying(false);
+    }
+  };
+
+  const handlePayPayPayment = async () => {
+    if (!validateCheckout()) return;
+
+    try {
+      setIsPaying(true);
+
+      const order = await createPendingOrder();
+      const targetOrderId = Number(order?.id ?? order?.orderId);
+
+      if (!targetOrderId) {
+        console.error("createOrder response:", order);
+        alert(pt.paymentFailed);
+        setIsPaying(false);
+        return;
+      }
+
+      const result = await createPayPayCode(targetOrderId);
+
+      const payPayUrl =
+        result?.data?.url ||
+        result?.data?.deeplink ||
+        result?.data?.urlScheme ||
+        "";
+
+      const merchantPaymentId =
+        result?.merchantPaymentId ||
+        result?.data?.merchantPaymentId ||
+        order?.orderNumber ||
+        "";
+
+      if (!payPayUrl) {
+        console.error("PayPay create-code response:", result);
+        alert(pt.payPayLinkFailed);
+        setIsPaying(false);
+        return;
+      }
+
+      if (typeof window !== "undefined" && merchantPaymentId) {
+        sessionStorage.setItem(
+          PAYPAY_MERCHANT_PAYMENT_ID_KEY,
+          merchantPaymentId
+        );
+      }
+
+      window.location.href = payPayUrl;
+    } catch (error: any) {
+      console.error("PayPay 결제 생성 실패:", error);
       alert(error?.response?.data?.message || error?.message || pt.paymentFailed);
       setIsPaying(false);
     }
@@ -712,14 +789,25 @@ export default function CheckoutPage() {
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={handlePayment}
-            disabled={isPaying || loading || cartItems.length === 0}
-            className="w-full h-14 rounded-2xl bg-black text-white font-semibold disabled:opacity-50"
-          >
-            {isPaying ? pt.payingButton : pt.payButton}
-          </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={handlePayment}
+              disabled={isPaying || loading || cartItems.length === 0}
+              className="w-full h-14 rounded-2xl bg-black text-white font-semibold disabled:opacity-50"
+            >
+              {isPaying ? pt.payingButton : pt.payButton}
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePayPayPayment}
+              disabled={isPaying || loading || cartItems.length === 0}
+              className="w-full h-14 rounded-2xl bg-red-500 border border-red-500 text-white font-semibold disabled:opacity-50 flex items-center justify-center shadow-sm"
+            >
+              {isPaying ? pt.payingButton : pt.payPayButton}
+            </button>
+          </div>
         </section>
       </div>
     </div>

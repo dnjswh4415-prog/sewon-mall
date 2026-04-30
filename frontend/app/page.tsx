@@ -18,6 +18,7 @@ import api from "@/src/api/axios";
 import StarRating from "@/src/components/StarRating";
 import { translateText } from "@/src/api/translate";
 import { useLanguage } from "@/src/contexts/LanguageContext";
+import MainPopupBanner from "@/src/components/MainPopupBanner";
 
 type SortType =
   | "latest"
@@ -40,6 +41,8 @@ const BIG_CATEGORY_TREE: Record<string, string[]> = {
   "가구/생활": ["의자", "책상", "조명", "생활가전"],
   PC부품: ["저장장치", "CPU", "메인보드", "그래픽카드", "RAM", "SSD", "케이스", "쿨러"],
   "사무/네트워크": ["프린터", "공유기"],
+ "스마트홈/보안": ["스마트도어락", "홈CCTV", "스마트조명", "스마트플러그", "로봇청소기"],
+  차량용품: ["블랙박스", "차량충전기", "차량거치대", "차량청소기", "차량공기청정기"],
 };
 
 const BIG_CATEGORY_LABELS: Record<
@@ -56,8 +59,10 @@ const BIG_CATEGORY_LABELS: Record<
   "가구/생활": { ko: "가구/생활", ja: "家具/生活" },
   PC부품: { ko: "PC부품", ja: "PCパーツ" },
   "사무/네트워크": { ko: "사무/네트워크", ja: "事務/ネットワーク" },
+ // 새로 추가
+ "스마트홈/보안": { ko: "스마트홈/보안", ja: "スマートホーム/セキュリティ" },
+  차량용품: { ko: "차량용품", ja: "カー用品" },
 };
-
 const uiText = {
   ko: {
     favorite: "즐겨찾기",
@@ -650,6 +655,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#f7f7f7] text-gray-900">
+      <MainPopupBanner />
       <div className="bg-[#f1f1f1] border-b border-gray-200">
         <div className="max-w-7xl mx-auto h-10 px-4 flex items-center justify-between text-sm text-gray-600">
           <div className="flex items-center gap-5">

@@ -37,6 +37,7 @@ model User {
   addresses    Address[]
   reviews      Review[]
   stockActions StockHistory[] @relation("StockHistoryActor")
+  viewHistories ProductViewHistory[]
 }
 
 //////////////////////////////////////////////////
@@ -82,6 +83,8 @@ model Product {
   stockHistories StockHistory[] //  재고 로그
 
   detailImages ProductDetailImage[]//디테일 이미지
+  regionalPrices ProductRegionalPrice[]
+  viewHistories ProductViewHistory[]
 
   @@index([createdAt])
   @@index([categoryId, createdAt])
@@ -169,6 +172,7 @@ model ProductVariant {
   orderItems     OrderItem[] // 주문 상품들
   stockHistories StockHistory[] // 재고 로그
   cartItems      CartItem[]
+  regionalPrices ProductVariantRegionalPrice[]
 
   @@index([productId, isActive])
   @@index([stock])
@@ -188,6 +192,53 @@ model ProductVariantOption {
 
   @@unique([variantId, valueId]) // 같은 SKU에 동일 옵션 중복 방지
 }
+
+model ProductRegionalPrice {
+  id        Int          @id @default(autoincrement())
+  productId Int
+  product   Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  currency  CurrencyCode
+  amount    Int
+  isActive  Boolean      @default(true)
+
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([productId, currency])
+  @@index([productId])
+}
+
+model ProductVariantRegionalPrice {
+  id        Int          @id @default(autoincrement())
+  variantId Int
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  currency  CurrencyCode
+  amount    Int
+  isActive  Boolean      @default(true)
+
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([variantId, currency])
+  @@index([variantId])
+}
+
+// BFS알고리즘
+model ProductViewHistory {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  viewedAt  DateTime @default(now())
+
+  @@index([userId, viewedAt])
+  @@index([productId, viewedAt])
+  @@index([userId, productId, viewedAt])
+}
+
 
 //////////////////////////////////////////////////
 // CART ITEM
@@ -465,6 +516,7 @@ enum OrderStatus {
 
 enum PaymentProvider {
   TOSS // 토스 결제
+  PAYPAY
 }
 
 enum PaymentStatus {
@@ -492,4 +544,9 @@ enum ReturnStatus {
   APPROVED // 승인됨
   REJECTED // 거절됨
   COMPLETED // 처리 완료
+}
+
+enum CurrencyCode {
+  KRW
+  JPY
 }

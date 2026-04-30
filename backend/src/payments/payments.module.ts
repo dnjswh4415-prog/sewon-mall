@@ -5,7 +5,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { StockModule } from '../stock/stock.module';
 
 @Module({
-  imports: [PrismaModule,StockModule],
+  imports: [PrismaModule, StockModule],
   controllers: [PaymentsController],
   providers: [PaymentsService],
   exports: [PaymentsService],
