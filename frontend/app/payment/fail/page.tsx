@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const CHECKOUT_ORDER_KEY = "sewon_checkout_client_order_key";
 const CHECKOUT_CART_SIGNATURE_KEY = "sewon_checkout_cart_signature";
 
-export default function PaymentFailPage() {
+function PaymentFailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -54,5 +54,19 @@ export default function PaymentFailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PaymentFailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#f7f7f7] flex items-center justify-center px-4">
+          <p className="text-gray-500">결제 실패 페이지를 불러오는 중입니다...</p>
+        </div>
+      }
+    >
+      <PaymentFailContent />
+    </Suspense>
   );
 }
