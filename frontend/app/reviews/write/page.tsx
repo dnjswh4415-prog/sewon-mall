@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageTopActions from "@/src/components/PageTopActions";
 import { createReview } from "@/src/api/review";
 
-export default function ReviewWritePage() {
+function ReviewWriteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -21,7 +22,7 @@ export default function ReviewWritePage() {
   const isInvalidOrderItemId =
     !Number.isInteger(orderItemId) || orderItemId < 1;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (isInvalidOrderItemId) {
@@ -127,5 +128,19 @@ export default function ReviewWritePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ReviewWritePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#f7f7f7] flex items-center justify-center px-4">
+          <p className="text-gray-500">리뷰 작성 페이지를 불러오는 중입니다...</p>
+        </div>
+      }
+    >
+      <ReviewWriteContent />
+    </Suspense>
   );
 }
