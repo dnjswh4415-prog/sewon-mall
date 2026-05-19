@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { ProductQueryDto } from './dto/product-query.dto';
 
 @Controller('product')
 export class ProductController {
@@ -27,13 +28,10 @@ export class ProductController {
   }
 
   @Get()
-  getProducts(
-    @Query('categoryId') categoryId?: string,
-    @Query('keyword') keyword?: string,
-  ) {
+  getProducts(@Query() query: ProductQueryDto) {
     return this.productService.getProducts({
-      categoryId: categoryId ? Number(categoryId) : undefined,
-      keyword,
+      categoryId: query.categoryId,
+      keyword: query.keyword,
     });
   }
 

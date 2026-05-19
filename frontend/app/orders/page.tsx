@@ -8,13 +8,35 @@ import { deleteReview } from "@/src/api/review";
 import DeliveryProgress from "@/src/components/DeliveryProgress";
 import PageTopActions from "@/src/components/PageTopActions";
 import { useJapanesePageTranslation } from "@/src/hooks/useJapanesePageTranslation";
+
 const API_BASE_URL = "http://localhost:5000";
 
 const normalizeImageUrl = (url?: string | null) => {
-  if (!url) return "/no-image.png";
+  if (!url || url === "/no-image.png") return "/no-image.png";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
   if (url.startsWith("/")) return `${API_BASE_URL}${url}`;
   return `${API_BASE_URL}/${url}`;
+};
+
+const getFirstProductImage = (product: any) => {
+  const images = Array.isArray(product?.images) ? [...product.images] : [];
+
+  const mainImage = images.find((img: any) => img?.isMain && img?.imageUrl)?.imageUrl;
+
+  const firstImage = images
+    .sort((a: any, b: any) => {
+      if (a?.isMain && !b?.isMain) return -1;
+      if (!a?.isMain && b?.isMain) return 1;
+
+      const sortA = Number(a?.sortOrder ?? 0);
+      const sortB = Number(b?.sortOrder ?? 0);
+
+      if (sortA !== sortB) return sortA - sortB;
+      return Number(a?.id ?? 0) - Number(b?.id ?? 0);
+    })
+    .find((img: any) => img?.imageUrl)?.imageUrl;
+
+  return normalizeImageUrl(mainImage || firstImage || product?.imageUrl);
 };
 
 const statusLabelMap = {
@@ -126,17 +148,23 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelLoadingId, setCancelLoadingId] = useState<number | null>(null);
-  const [reviewDeleteLoadingId, setReviewDeleteLoadingId] = useState<number | null>(null);
+  const [reviewDeleteLoadingId, setReviewDeleteLoadingId] = useState<number | null>(
+    null
+  );
 
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
   const [searchInput, setSearchInput] = useState("");
-  const [periodInput, setPeriodInput] = useState<"all" | "1m" | "3m" | "6m">("all");
+  const [periodInput, setPeriodInput] = useState<"all" | "1m" | "3m" | "6m">(
+    "all"
+  );
 
   const [appliedKeyword, setAppliedKeyword] = useState("");
-  const [appliedPeriod, setAppliedPeriod] = useState<"all" | "1m" | "3m" | "6m">("all");
+  const [appliedPeriod, setAppliedPeriod] = useState<"all" | "1m" | "3m" | "6m">(
+    "all"
+  );
 
   const translationItems = useMemo(() => {
     return orders.flatMap((order: any) =>
@@ -164,15 +192,10 @@ export default function OrdersPage() {
     );
   }, [orders]);
 
-  const {
-    language,
-    mounted,
-    translating,
-    getText,
-    handleToggleLanguage,
-  } = useJapanesePageTranslation({
-    items: translationItems,
-  });
+  const { language, mounted, translating, getText, handleToggleLanguage } =
+    useJapanesePageTranslation({
+      items: translationItems,
+    });
 
   const t = pageText[language];
   const statusText = statusLabelMap[language];
@@ -342,6 +365,7 @@ export default function OrdersPage() {
             >
               {translating ? "번역 중..." : language === "ja" ? "한국어" : "日本語"}
             </button>
+
             <PageTopActions backFallbackHref="/" />
           </div>
         </div>
@@ -428,15 +452,20 @@ export default function OrdersPage() {
 
                       {Array.isArray(order.items) && order.items.length > 0 && (
                         <div className="mt-4 p-4 rounded-xl bg-gray-50 border border-gray-200">
-                          <p className="text-sm text-gray-500 mb-3">{t.orderItems}</p>
+                          <p className="text-sm text-gray-500 mb-3">
+                            {t.orderItems}
+                          </p>
 
                           <div className="space-y-3">
                             {order.items.map((item: any) => {
                               const review = getReview(item);
                               const productName = getText(
-                                `order-product-name-${item.id}-${item?.product?.id ?? "unknown"}`,
+                                `order-product-name-${item.id}-${
+                                  item?.product?.id ?? "unknown"
+                                }`,
                                 item.product?.name
                               );
+                              const productImage = getFirstProductImage(item.product);
 
                               return (
                                 <div
@@ -445,20 +474,14 @@ export default function OrdersPage() {
                                 >
                                   <div className="flex items-center gap-4 min-w-0">
                                     <div className="w-16 h-16 rounded-xl overflow-hidden bg-white border border-gray-200 shrink-0">
-                                      {item.product?.imageUrl ? (
                                       <img
-                                          src={normalizeImageUrl(item.product?.imageUrl)}
-                                          alt={item.product?.name || "상품 이미지"}
-                                          className="w-full h-full object-cover"
-                                          onError={(e) => {
-                                            e.currentTarget.src = "/no-image.png";
-                                          }}
-                                        />
-                                      ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
-                                          {t.noImage}
-                                        </div>
-                                      )}
+                                        src={productImage}
+                                        alt={item.product?.name || "상품 이미지"}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          e.currentTarget.src = "/no-image.png";
+                                        }}
+                                      />
                                     </div>
 
                                     <div className="min-w-0 flex-1">
@@ -473,12 +496,16 @@ export default function OrdersPage() {
                                           ` · ${item.variant.options
                                             .map((opt: any) => {
                                               const optionName = getText(
-                                                `order-option-name-${item.id}-${opt?.value?.option?.id ?? opt?.id}`,
+                                                `order-option-name-${item.id}-${
+                                                  opt?.value?.option?.id ?? opt?.id
+                                                }`,
                                                 opt?.value?.option?.name
                                               );
 
                                               const optionValue = getText(
-                                                `order-option-value-${item.id}-${opt?.value?.id ?? opt?.id}`,
+                                                `order-option-value-${item.id}-${
+                                                  opt?.value?.id ?? opt?.id
+                                                }`,
                                                 opt?.value?.value
                                               );
 
@@ -541,7 +568,8 @@ export default function OrdersPage() {
 
                     <div className="flex flex-col items-start lg:items-end gap-3">
                       <span className="px-3 py-1 rounded-full bg-black text-white text-sm">
-                        {statusText[order.status as keyof typeof statusText] || order.status}
+                        {statusText[order.status as keyof typeof statusText] ||
+                          order.status}
                       </span>
 
                       <div className="flex flex-wrap gap-2">
@@ -554,6 +582,7 @@ export default function OrdersPage() {
 
                         {canCancel && (
                           <button
+                            type="button"
                             onClick={() => handleCancel(order.id)}
                             disabled={cancelLoadingId === order.id}
                             className="px-4 py-2 rounded-xl bg-red-500 text-white disabled:opacity-50"
@@ -567,9 +596,16 @@ export default function OrdersPage() {
 
                       {(order.deliveryCompany || order.trackingNumber) && (
                         <div className="text-sm text-gray-500 text-right">
-                          {order.deliveryCompany && <p>{t.carrier}: {order.deliveryCompany}</p>}
+                          {order.deliveryCompany && (
+                            <p>
+                              {t.carrier}: {order.deliveryCompany}
+                            </p>
+                          )}
+
                           {order.trackingNumber && (
-                            <p>{t.trackingNumber}: {order.trackingNumber}</p>
+                            <p>
+                              {t.trackingNumber}: {order.trackingNumber}
+                            </p>
                           )}
                         </div>
                       )}

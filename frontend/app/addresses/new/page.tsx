@@ -8,7 +8,7 @@ import PageTopActions from "@/src/components/PageTopActions";
 
 declare global {
   interface Window {
-    daum: any;
+    daum?: any;
   }
 }
 

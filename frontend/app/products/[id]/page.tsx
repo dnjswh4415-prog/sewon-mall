@@ -1,13 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Heart, Home, ShoppingCart } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  Home,
+  ShoppingCart,
+} from "lucide-react";
 import {
   fetchProductById,
   fetchProductRecommendations,
   recordProductView,
 } from "@/src/api/products";
+import { getProductImages } from "@/src/api/product-image";
 import { getProfile } from "@/src/api/auth";
 import { getWishlist, toggleWishlist } from "@/src/api/wishlist";
 import api from "@/src/api/axios";
@@ -99,6 +107,7 @@ type ProductDetail = {
   detailImages?: ProductDetailImage[];
   avgRating?: number;
   reviewCount?: number;
+  qnaCount?: number;
   Category?: {
     id: number;
     name: string;
@@ -131,7 +140,9 @@ const detailText = {
     totalPrice: "총 금액",
     addToCart: "장바구니에 담기",
     buyNow: "바로 구매하기",
+    detailInfo: "상세정보",
     reviews: "리뷰",
+    qna: "Q&A",
     noReview: "아직 리뷰가 없습니다.",
     noReviewContent: "리뷰 내용이 없습니다.",
     noImage: "이미지 없음",
@@ -145,6 +156,7 @@ const detailText = {
     recommendations: "연관 상품 추천",
     noRecommendations: "추천 상품이 없습니다.",
     recommendReviewUnit: "리뷰",
+    noQna: "아직 등록된 문의가 없습니다.",
   },
   ja: {
     back: "戻る",
@@ -167,7 +179,9 @@ const detailText = {
     totalPrice: "合計金額",
     addToCart: "カートに入れる",
     buyNow: "今すぐ購入",
+    detailInfo: "詳細情報",
     reviews: "レビュー",
+    qna: "Q&A",
     noReview: "まだレビューがありません。",
     noReviewContent: "レビュー内容がありません。",
     noImage: "画像なし",
@@ -181,6 +195,7 @@ const detailText = {
     recommendations: "関連商品おすすめ",
     noRecommendations: "おすすめ商品がありません。",
     recommendReviewUnit: "レビュー",
+    noQna: "まだお問い合わせはありません。",
   },
 } as const;
 
@@ -191,16 +206,82 @@ export default function ProductDetailPage() {
 
   const [user, setUser] = useState<any>(null);
   const [product, setProduct] = useState<ProductDetail | null>(null);
-  const [recommendations, setRecommendations] = useState<RecommendedProduct[]>([]);
+  const [recommendations, setRecommendations] = useState<RecommendedProduct[]>(
+    []
+  );
   const [loading, setLoading] = useState(true);
 
   const [wishlistIds, setWishlistIds] = useState<number[]>([]);
   const [selectedImage, setSelectedImage] = useState("");
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState<"detail" | "review" | "qna">(
+    "detail"
+  );
 
   const [selectedOptions, setSelectedOptions] = useState<Record<string, number>>(
     {}
   );
   const [quantity, setQuantity] = useState(1);
+
+  const detailInfoRef = useRef<HTMLElement | null>(null);
+  const reviewRef = useRef<HTMLElement | null>(null);
+  const qnaRef = useRef<HTMLElement | null>(null);
+
+  const normalizeImageUrl = (url?: string | null) => {
+    if (!url || url === "/no-image.png") return "/no-image.png";
+
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      return url;
+    }
+
+    if (url.startsWith("/uploads/")) {
+      return `${API_BASE_URL}${url}`;
+    }
+
+    if (url.startsWith("uploads/")) {
+      return `${API_BASE_URL}/${url}`;
+    }
+
+    if (url.startsWith("/images/")) {
+      return url;
+    }
+
+    if (url.startsWith("images/")) {
+      return `/${url}`;
+    }
+
+    if (url.startsWith("/")) {
+      return `${API_BASE_URL}${url}`;
+    }
+
+    return `${API_BASE_URL}/${url}`;
+  };
+
+  const getProductThumbnail = (target?: {
+    imageUrl?: string | null;
+    images?: ProductImage[];
+  }) => {
+    if (!target) return "/no-image.png";
+
+    const images = Array.isArray(target.images) ? [...target.images] : [];
+
+    const mainImage = images.find((img) => img.isMain && img.imageUrl)?.imageUrl;
+
+    const firstImage = images
+      .sort((a, b) => {
+        if (a.isMain && !b.isMain) return -1;
+        if (!a.isMain && b.isMain) return 1;
+
+        const sortA = Number(a.sortOrder ?? 0);
+        const sortB = Number(b.sortOrder ?? 0);
+
+        if (sortA !== sortB) return sortA - sortB;
+        return Number(a.id) - Number(b.id);
+      })
+      .find((img) => img.imageUrl)?.imageUrl;
+
+    return normalizeImageUrl(mainImage || firstImage || target.imageUrl);
+  };
 
   const translationItems = useMemo(() => {
     if (!product) return [];
@@ -252,12 +333,6 @@ export default function ProductDetailPage() {
 
   const t = detailText[language];
 
-  const normalizeImageUrl = (url?: string | null) => {
-    if (!url) return "/no-image.png";
-    if (url.startsWith("http://") || url.startsWith("https://")) return url;
-    return `${API_BASE_URL}${url}`;
-  };
-
   useEffect(() => {
     const loadUser = async () => {
       try {
@@ -287,17 +362,22 @@ export default function ProductDetailPage() {
         setLoading(true);
 
         const data = await fetchProductById(productId);
-        setProduct(data);
 
-        const mainImage =
-          data?.images?.find((img: ProductImage) => img.isMain)?.imageUrl ||
-          [...(data?.images || [])].sort(
-            (a: ProductImage, b: ProductImage) => a.sortOrder - b.sortOrder
-          )[0]?.imageUrl ||
-          data?.imageUrl ||
-          "";
+        let productImages: ProductImage[] = [];
 
-        setSelectedImage(normalizeImageUrl(mainImage));
+        try {
+          const imageData = await getProductImages(productId);
+          productImages = Array.isArray(imageData) ? imageData : [];
+        } catch (err) {
+          console.warn("상품 이미지 목록 조회 실패:", err);
+        }
+
+        const mergedProduct: ProductDetail = {
+          ...data,
+          images: productImages.length > 0 ? productImages : data?.images || [],
+        };
+
+        setProduct(mergedProduct);
 
         try {
           await recordProductView(productId);
@@ -358,22 +438,38 @@ export default function ProductDetailPage() {
 
     const rawImages: string[] = [];
 
+    const pushUniqueImage = (url?: string | null) => {
+      if (url && !rawImages.includes(url)) {
+        rawImages.push(url);
+      }
+    };
+
     if (product.images?.length) {
       [...product.images]
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .forEach((img) => {
-          if (img.imageUrl && !rawImages.includes(img.imageUrl)) {
-            rawImages.push(img.imageUrl);
-          }
-        });
+        .sort((a, b) => {
+          if (a.isMain && !b.isMain) return -1;
+          if (!a.isMain && b.isMain) return 1;
+
+          const sortA = Number(a.sortOrder ?? 0);
+          const sortB = Number(b.sortOrder ?? 0);
+
+          if (sortA !== sortB) return sortA - sortB;
+          return Number(a.id) - Number(b.id);
+        })
+        .forEach((img) => pushUniqueImage(img.imageUrl));
     }
 
-    if (product.imageUrl && !rawImages.includes(product.imageUrl)) {
-      rawImages.unshift(product.imageUrl);
-    }
+    pushUniqueImage(product.imageUrl);
 
-    return rawImages.map((url) => normalizeImageUrl(url));
+    return rawImages.length
+      ? rawImages.map((url) => normalizeImageUrl(url))
+      : ["/no-image.png"];
   }, [product]);
+
+  useEffect(() => {
+    setSelectedImageIndex(0);
+    setSelectedImage(imageList[0] || "/no-image.png");
+  }, [product?.id, imageList]);
 
   const detailBannerImages = useMemo(() => {
     if (!product) return [];
@@ -385,8 +481,8 @@ export default function ProductDetailPage() {
         .filter(Boolean);
     }
 
-    if ((product as any).detailImageUrl) {
-      return [normalizeImageUrl((product as any).detailImageUrl)];
+    if (product.detailImageUrl) {
+      return [normalizeImageUrl(product.detailImageUrl)];
     }
 
     return [];
@@ -404,12 +500,58 @@ export default function ProductDetailPage() {
     return Number(product.stock || 0);
   }, [product, selectedVariant]);
 
-  const totalPrice = useMemo(() => currentPrice * quantity, [currentPrice, quantity]);
+  const totalPrice = useMemo(
+    () => currentPrice * quantity,
+    [currentPrice, quantity]
+  );
 
   const isWished = useMemo(() => {
     if (!product) return false;
     return wishlistIds.includes(product.id);
   }, [product, wishlistIds]);
+
+  const handleSelectImage = (index: number) => {
+    if (!imageList.length) return;
+
+    const safeIndex = Math.max(0, Math.min(index, imageList.length - 1));
+    setSelectedImageIndex(safeIndex);
+    setSelectedImage(imageList[safeIndex] || "/no-image.png");
+  };
+
+  const handlePrevImage = () => {
+    if (imageList.length <= 1) return;
+
+    const nextIndex =
+      selectedImageIndex === 0 ? imageList.length - 1 : selectedImageIndex - 1;
+
+    handleSelectImage(nextIndex);
+  };
+
+  const handleNextImage = () => {
+    if (imageList.length <= 1) return;
+
+    const nextIndex =
+      selectedImageIndex === imageList.length - 1 ? 0 : selectedImageIndex + 1;
+
+    handleSelectImage(nextIndex);
+  };
+
+  const scrollToTab = (tab: "detail" | "review" | "qna") => {
+    setActiveTab(tab);
+
+    const targetRef =
+      tab === "detail" ? detailInfoRef : tab === "review" ? reviewRef : qnaRef;
+
+    if (!targetRef.current) return;
+
+    const top =
+      targetRef.current.getBoundingClientRect().top + window.scrollY - 90;
+
+    window.scrollTo({
+      top,
+      behavior: "smooth",
+    });
+  };
 
   const handleOptionChange = (optionName: string, valueId: number) => {
     setSelectedOptions((prev) => ({
@@ -440,36 +582,40 @@ export default function ProductDetailPage() {
   };
 
   const handleAddToCart = async () => {
+    if (!product) return false;
+
     if (!user) {
       alert(t.cartLoginRequired);
       router.push("/login");
-      return;
+      return false;
     }
 
-    if (!product) return;
-
-    if (product.options?.length > 0 && !selectedVariant) {
+    if (product.variants?.length && !selectedVariant) {
       alert(t.selectOption);
-      return;
+      return false;
     }
 
     try {
-      await api.post("/api/cart", {
-        productId: product.id,
-        variantId: selectedVariant?.id ?? null,
-        quantity,
+      await api.post("/api/cart/add", {
+        productId: Number(product.id),
+        variantId: selectedVariant ? Number(selectedVariant.id) : null,
+        quantity: Number(quantity),
       });
 
       alert(t.addCartSuccess);
-    } catch (error) {
+      return true;
+    } catch (error: any) {
       console.error("장바구니 추가 실패:", error);
-      alert(t.addCartFailed);
+      alert(error?.response?.data?.message || t.addCartFailed);
+      return false;
     }
   };
 
   const handleBuyNow = async () => {
-    await handleAddToCart();
-    router.push("/cart");
+    const success = await handleAddToCart();
+    if (success) {
+      router.push("/cart");
+    }
   };
 
   if (!mounted) {
@@ -489,6 +635,7 @@ export default function ProductDetailPage() {
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex flex-wrap items-center gap-3 mb-6">
           <button
+            type="button"
             onClick={() => router.back()}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
           >
@@ -497,6 +644,7 @@ export default function ProductDetailPage() {
           </button>
 
           <button
+            type="button"
             onClick={() => router.push("/")}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
           >
@@ -514,33 +662,60 @@ export default function ProductDetailPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <section className="bg-white rounded-3xl border border-gray-200 p-6">
-            <div className="aspect-square bg-[#f1f1f1] rounded-2xl overflow-hidden mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+          <section className="bg-white rounded-3xl border border-gray-200 p-6 self-start">
+            <div className="relative aspect-square bg-[#f1f1f1] rounded-2xl overflow-hidden mb-4">
               <img
-                src={selectedImage || "/no-image.png"}
+                src={selectedImage || imageList[selectedImageIndex] || "/no-image.png"}
                 alt={product.name}
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   e.currentTarget.src = "/no-image.png";
                 }}
               />
+
+              {imageList.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePrevImage}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 border border-gray-200 flex items-center justify-center hover:bg-white shadow-sm"
+                  >
+                    <ChevronLeft size={22} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNextImage}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 border border-gray-200 flex items-center justify-center hover:bg-white shadow-sm"
+                  >
+                    <ChevronRight size={22} />
+                  </button>
+
+                  <div className="absolute bottom-3 right-3 px-3 py-1 rounded-full bg-black/70 text-white text-sm">
+                    {selectedImageIndex + 1} / {imageList.length}
+                  </div>
+                </>
+              )}
             </div>
 
             {imageList.length > 1 && (
-              <div className="grid grid-cols-5 gap-3">
+              <div className="flex gap-3 overflow-x-auto pb-1 max-w-full">
                 {imageList.map((img, index) => (
                   <button
                     key={`${img}-${index}`}
-                    onClick={() => setSelectedImage(img)}
-                    className={`border rounded-2xl overflow-hidden ${
-                      selectedImage === img ? "border-black" : "border-gray-200"
+                    type="button"
+                    onClick={() => handleSelectImage(index)}
+                    className={`relative flex-none w-[80px] h-[80px] min-w-[80px] max-w-[80px] min-h-[80px] max-h-[80px] rounded-2xl overflow-hidden bg-gray-100 ${
+                      selectedImageIndex === index
+                        ? "border-2 border-black"
+                        : "border border-gray-200"
                     }`}
                   >
                     <img
                       src={img}
-                      alt={`${product.name}-${index}`}
-                      className="w-full aspect-square object-cover"
+                      alt={`${product.name}-${index + 1}`}
+                      className="absolute inset-0 w-full h-full object-cover"
                       onError={(e) => {
                         e.currentTarget.src = "/no-image.png";
                       }}
@@ -551,7 +726,7 @@ export default function ProductDetailPage() {
             )}
           </section>
 
-          <section className="bg-white rounded-3xl border border-gray-200 p-6">
+          <section className="bg-white rounded-3xl border border-gray-200 p-6 self-start">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm text-gray-500 mb-2">
@@ -561,12 +736,14 @@ export default function ProductDetailPage() {
                     product.Category?.name || t.uncategorized
                   )}
                 </p>
+
                 <h1 className="text-3xl font-bold">
                   {getText(`product-name-${product.id}`, product.name)}
                 </h1>
               </div>
 
               <button
+                type="button"
                 onClick={handleWishlistToggle}
                 className={`w-12 h-12 rounded-2xl border flex items-center justify-center ${
                   isWished
@@ -581,12 +758,13 @@ export default function ProductDetailPage() {
             <div className="mt-4 flex items-center gap-3">
               <StarRating rating={Number(product.avgRating || 0)} />
               <span className="text-sm text-gray-600">
-                {Number(product.avgRating || 0).toFixed(1)} ({product.reviewCount || 0}
+                {Number(product.avgRating || 0).toFixed(1)} (
+                {product.reviewCount || 0}
                 {t.reviewUnit})
               </span>
             </div>
 
-            <div className="mt-6 text-gray-700 leading-7">
+            <div className="mt-6 text-gray-700 leading-7 whitespace-pre-line">
               {product.description ? (
                 getText(`product-description-${product.id}`, product.description)
               ) : (
@@ -594,9 +772,9 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {product.options?.length > 0 && (
+            {(product.options?.length ?? 0) > 0 && (
               <div className="mt-8 space-y-5">
-                {product.options.map((option) => {
+                {product.options?.map((option) => {
                   const displayOptionName = getText(
                     `option-name-${option.id}`,
                     option.name
@@ -605,9 +783,11 @@ export default function ProductDetailPage() {
                   return (
                     <div key={option.id}>
                       <p className="font-semibold mb-2">{displayOptionName}</p>
+
                       <div className="flex flex-wrap gap-2">
                         {option.values.map((value) => {
-                          const selected = selectedOptions[option.name] === value.id;
+                          const selected =
+                            selectedOptions[option.name] === value.id;
                           const displayValue = getText(
                             `option-value-${value.id}`,
                             value.value
@@ -616,7 +796,10 @@ export default function ProductDetailPage() {
                           return (
                             <button
                               key={value.id}
-                              onClick={() => handleOptionChange(option.name, value.id)}
+                              type="button"
+                              onClick={() =>
+                                handleOptionChange(option.name, value.id)
+                              }
                               className={`px-4 py-2 rounded-xl border text-sm ${
                                 selected
                                   ? "bg-black text-white border-black"
@@ -634,9 +817,10 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {product.options?.length > 0 && (
+            {(product.options?.length ?? 0) > 0 && (
               <div className="mt-6 p-4 bg-gray-50 rounded-2xl border border-gray-200">
                 <p className="text-sm text-gray-500 mb-2">{t.selectedOption}</p>
+
                 {selectedVariant ? (
                   <div className="text-sm font-medium">
                     {selectedVariant.options
@@ -665,22 +849,27 @@ export default function ProductDetailPage() {
               <p className="text-sm text-gray-500 mb-2">{t.stock}</p>
               <p className="font-semibold">
                 {currentStock > 0
-                  ? `${t.stock} ${currentStock}${t.stockRemain}`
+                  ? `${currentStock}${t.stockRemain}`
                   : t.soldOut}
               </p>
             </div>
 
             <div className="mt-6">
               <p className="text-sm text-gray-500 mb-2">{t.quantity}</p>
+
               <div className="flex items-center gap-3">
                 <button
+                  type="button"
                   onClick={() => setQuantity((prev) => Math.max(1, prev - 1))}
                   className="w-10 h-10 rounded-xl border border-gray-300 hover:bg-gray-50"
                 >
                   -
                 </button>
+
                 <span className="w-12 text-center font-semibold">{quantity}</span>
+
                 <button
+                  type="button"
                   onClick={() =>
                     setQuantity((prev) => Math.min(currentStock || 1, prev + 1))
                   }
@@ -703,6 +892,7 @@ export default function ProductDetailPage() {
 
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
+                type="button"
                 onClick={handleAddToCart}
                 disabled={currentStock < 1}
                 className="h-14 rounded-2xl border border-black text-black font-semibold hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center gap-2"
@@ -712,6 +902,7 @@ export default function ProductDetailPage() {
               </button>
 
               <button
+                type="button"
                 onClick={handleBuyNow}
                 disabled={currentStock < 1}
                 className="h-14 rounded-2xl bg-black text-white font-semibold hover:opacity-90 disabled:opacity-50"
@@ -722,8 +913,56 @@ export default function ProductDetailPage() {
           </section>
         </div>
 
-        {detailBannerImages.length > 0 && (
-          <section className="mt-8 bg-white rounded-3xl border border-gray-200 p-4 md:p-6">
+        <div className="sticky top-0 z-30 mt-8 bg-[#f8fafc] pt-2">
+          <div className="bg-white border-b border-gray-200 rounded-t-2xl">
+            <div className="flex items-center justify-center gap-8 md:gap-12 h-14">
+              <button
+                type="button"
+                onClick={() => scrollToTab("detail")}
+                className={`h-full px-1 text-sm md:text-base font-medium border-b-2 ${
+                  activeTab === "detail"
+                    ? "border-black text-black"
+                    : "border-transparent text-gray-500"
+                }`}
+              >
+                {t.detailInfo}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => scrollToTab("review")}
+                className={`h-full px-1 text-sm md:text-base font-medium border-b-2 ${
+                  activeTab === "review"
+                    ? "border-black text-black"
+                    : "border-transparent text-gray-500"
+                }`}
+              >
+                {t.reviews} {product.reviewCount || 0}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => scrollToTab("qna")}
+                className={`h-full px-1 text-sm md:text-base font-medium border-b-2 ${
+                  activeTab === "qna"
+                    ? "border-black text-black"
+                    : "border-transparent text-gray-500"
+                }`}
+              >
+                {t.qna} {product.qnaCount || 0}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <section
+          ref={detailInfoRef}
+          id="detail-info"
+          className="bg-white rounded-b-3xl border-x border-b border-gray-200 p-4 md:p-6"
+        >
+          <h2 className="text-2xl font-bold mb-5">{t.detailInfo}</h2>
+
+          {detailBannerImages.length > 0 ? (
             <div className="space-y-4">
               {detailBannerImages.map((src, index) => (
                 <img
@@ -738,10 +977,20 @@ export default function ProductDetailPage() {
                 />
               ))}
             </div>
-          </section>
-        )}
+          ) : (
+            <div className="text-gray-700 leading-7 whitespace-pre-line">
+              {product.description
+                ? getText(`product-description-${product.id}`, product.description)
+                : t.noDescription}
+            </div>
+          )}
+        </section>
 
-        <section className="mt-8 bg-white rounded-3xl border border-gray-200 p-4 md:p-6">
+        <section
+          ref={reviewRef}
+          id="reviews"
+          className="mt-8 bg-white rounded-3xl border border-gray-200 p-4 md:p-6"
+        >
           <h2 className="text-2xl font-bold mb-5">
             {t.reviews} ({product.reviewCount || 0})
           </h2>
@@ -758,10 +1007,12 @@ export default function ProductDetailPage() {
                       <p className="font-semibold">
                         {review.user?.name || t.anonymous}
                       </p>
+
                       <div className="mt-1">
                         <StarRating rating={review.rating} />
                       </div>
                     </div>
+
                     <span className="text-sm text-gray-500">
                       {new Date(review.createdAt).toLocaleDateString()}
                     </span>
@@ -797,49 +1048,54 @@ export default function ProductDetailPage() {
           )}
         </section>
 
+        <section
+          ref={qnaRef}
+          id="qna"
+          className="mt-8 bg-white rounded-3xl border border-gray-200 p-4 md:p-6"
+        >
+          <h2 className="text-2xl font-bold mb-5">
+            {t.qna} ({product.qnaCount || 0})
+          </h2>
+
+          <div className="text-gray-500">{t.noQna}</div>
+        </section>
+
         <section className="mt-8 bg-white rounded-3xl border border-gray-200 p-4 md:p-6">
           <h2 className="text-2xl font-bold mb-5">{t.recommendations}</h2>
 
           {recommendations.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {recommendations.map((item) => {
-                const mainImage =
-                  item?.images?.find((img) => img.isMain)?.imageUrl ||
-                  [...(item?.images || [])].sort(
-                    (a, b) => a.sortOrder - b.sortOrder
-                  )[0]?.imageUrl ||
-                  item?.imageUrl ||
-                  "";
+              {recommendations.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => router.push(`/products/${item.id}`)}
+                  className="text-left border rounded-2xl p-4 bg-white hover:shadow-sm transition"
+                >
+                  <img
+                    src={getProductThumbnail(item)}
+                    alt={item.name}
+                    className="w-full aspect-square object-cover rounded-xl mb-3"
+                    onError={(e) => {
+                      e.currentTarget.src = "/no-image.png";
+                    }}
+                  />
 
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => router.push(`/products/${item.id}`)}
-                    className="text-left border rounded-2xl p-4 bg-white hover:shadow-sm transition"
-                  >
-                    <img
-                      src={normalizeImageUrl(mainImage)}
-                      alt={item.name}
-                      className="w-full aspect-square object-cover rounded-xl mb-3"
-                      onError={(e) => {
-                        e.currentTarget.src = "/no-image.png";
-                      }}
-                    />
-                    <div className="font-semibold line-clamp-2 min-h-[48px]">
-                      {getText(`recommend-name-${item.id}`, item.name)}
-                    </div>
-                    <div className="text-sm text-gray-500 mt-1">
-                      {Number(item.price).toLocaleString()}원
-                    </div>
-                    <div className="text-sm text-yellow-600 mt-1">
-                      {Number(item.avgRating ?? 0).toFixed(1)} /{" "}
-                      {item.reviewCount ?? 0}
-                      {t.recommendReviewUnit}
-                    </div>
-                  </button>
-                );
-              })}
+                  <div className="font-semibold line-clamp-2 min-h-[48px]">
+                    {getText(`recommend-name-${item.id}`, item.name)}
+                  </div>
+
+                  <div className="text-sm text-gray-500 mt-1">
+                    {Number(item.price).toLocaleString()}원
+                  </div>
+
+                  <div className="text-sm text-yellow-600 mt-1">
+                    {Number(item.avgRating ?? 0).toFixed(1)} /{" "}
+                    {item.reviewCount ?? 0}
+                    {t.recommendReviewUnit}
+                  </div>
+                </button>
+              ))}
             </div>
           ) : (
             <div className="text-gray-500">{t.noRecommendations}</div>

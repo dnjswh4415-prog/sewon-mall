@@ -24,6 +24,18 @@ interface GetMyOrdersQuery {
 export class OrderService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private getProductImagesInclude() {
+    return {
+      images: {
+        orderBy: [
+          { isMain: 'desc' as const },
+          { sortOrder: 'asc' as const },
+          { id: 'asc' as const },
+        ],
+      },
+    };
+  }
+
   private generateOrderNumber(userId: number) {
     const random = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `ORD-${Date.now()}-${userId}-${random}`;
@@ -99,7 +111,9 @@ export class OrderService {
           address: true,
           items: {
             include: {
-              product: true,
+              product: {
+                include: this.getProductImagesInclude(),
+              },
               variant: {
                 include: {
                   options: {
@@ -260,7 +274,9 @@ export class OrderService {
           address: true,
           items: {
             include: {
-              product: true,
+              product: {
+                include: this.getProductImagesInclude(),
+              },
               variant: {
                 include: {
                   options: {
@@ -396,6 +412,19 @@ export class OrderService {
                   id: true,
                   name: true,
                   imageUrl: true,
+                  images: {
+                    orderBy: [
+                      { isMain: 'desc' },
+                      { sortOrder: 'asc' },
+                      { id: 'asc' },
+                    ],
+                    select: {
+                      id: true,
+                      imageUrl: true,
+                      sortOrder: true,
+                      isMain: true,
+                    },
+                  },
                 },
               },
               variant: {
@@ -457,7 +486,9 @@ export class OrderService {
         address: true,
         items: {
           include: {
-            product: true,
+            product: {
+              include: this.getProductImagesInclude(),
+            },
             variant: {
               include: {
                 options: {
@@ -504,10 +535,7 @@ export class OrderService {
       throw new NotFoundException('주문을 찾을 수 없습니다.');
     }
 
-    if (
-      order.status !== 'PAYMENT_COMPLETE' &&
-      order.status !== 'SHIPPING'
-    ) {
+    if (order.status !== 'PAYMENT_COMPLETE' && order.status !== 'SHIPPING') {
       throw new BadRequestException('현재 상태에서는 주문 취소가 불가능합니다.');
     }
 
@@ -653,7 +681,9 @@ export class OrderService {
         address: true,
         items: {
           include: {
-            product: true,
+            product: {
+              include: this.getProductImagesInclude(),
+            },
             variant: {
               include: {
                 options: {
@@ -684,7 +714,9 @@ export class OrderService {
         address: true,
         items: {
           include: {
-            product: true,
+            product: {
+              include: this.getProductImagesInclude(),
+            },
             variant: {
               include: {
                 options: {

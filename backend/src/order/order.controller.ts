@@ -14,6 +14,9 @@ import {
 import { OrderService } from './order.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
+import { CreateOrderDto } from './dto/create-order.dto';
+import { ShipOrderDto } from './dto/ship-order.dto';
+import { OrderListQueryDto } from './dto/order-list-query.dto';
 
 @Controller('orders')
 export class OrderController {
@@ -31,26 +34,14 @@ export class OrderController {
 
   @UseGuards(JwtAuthGuard)
   @Post()
-  async createOrder(@Req() req: any, @Body() body: any) {
+  async createOrder(@Req() req: any, @Body() dto: CreateOrderDto) {
     const userId = this.getUserId(req);
-
-    if (!Array.isArray(body?.items) || body.items.length === 0) {
-      throw new BadRequestException('주문 상품이 없습니다.');
-    }
-
-    if (!body?.addressId) {
-      throw new BadRequestException('배송지를 선택하세요.');
-    }
-
-    if (!body?.clientOrderKey || !String(body.clientOrderKey).trim()) {
-      throw new BadRequestException('주문 키가 없습니다.');
-    }
 
     const order = await this.orderService.createOrder(
       userId,
-      body.items,
-      Number(body.addressId),
-      String(body.clientOrderKey),
+      dto.items,
+      dto.addressId,
+      dto.clientOrderKey,
     );
 
     return {
@@ -66,18 +57,15 @@ export class OrderController {
   @Get()
   async getMyOrdersRoot(
     @Req() req: any,
-    @Query('page') page?: string,
-    @Query('pageSize') pageSize?: string,
-    @Query('period') period?: string,
-    @Query('keyword') keyword?: string,
+    @Query() query: OrderListQueryDto,
   ) {
     const userId = this.getUserId(req);
 
     return this.orderService.getMyOrders(userId, {
-      page,
-      pageSize,
-      period,
-      keyword,
+      page: String(query.page ?? 1),
+      pageSize: String(query.pageSize ?? 10),
+      period: query.period,
+      keyword: query.keyword,
     });
   }
 
@@ -85,18 +73,15 @@ export class OrderController {
   @Get('my')
   async getMyOrders(
     @Req() req: any,
-    @Query('page') page?: string,
-    @Query('pageSize') pageSize?: string,
-    @Query('period') period?: string,
-    @Query('keyword') keyword?: string,
+    @Query() query: OrderListQueryDto,
   ) {
     const userId = this.getUserId(req);
 
     return this.orderService.getMyOrders(userId, {
-      page,
-      pageSize,
-      period,
-      keyword,
+      page: String(query.page ?? 1),
+      pageSize: String(query.pageSize ?? 10),
+      period: query.period,
+      keyword: query.keyword,
     });
   }
 
@@ -114,14 +99,20 @@ export class OrderController {
 
   @UseGuards(JwtAuthGuard)
   @Get(':id')
-  async getOrderDetail(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
+  async getOrderDetail(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     const userId = this.getUserId(req);
     return this.orderService.getOrderDetail(userId, id);
   }
 
   @UseGuards(JwtAuthGuard)
   @Patch(':id/cancel')
-  async cancelOrder(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
+  async cancelOrder(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     const userId = this.getUserId(req);
     return this.orderService.cancelOrder(userId, id);
   }
@@ -130,16 +121,12 @@ export class OrderController {
   @Patch(':id/ship')
   async shipOrder(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: any,
+    @Body() dto: ShipOrderDto,
   ) {
-    if (!body?.deliveryCompany || !body?.trackingNumber) {
-      throw new BadRequestException('택배사와 송장번호를 입력하세요.');
-    }
-
     return this.orderService.startShipping(
       id,
-      String(body.deliveryCompany),
-      String(body.trackingNumber),
+      dto.deliveryCompany,
+      dto.trackingNumber,
     );
   }
 
