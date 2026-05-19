@@ -222,7 +222,11 @@ export default function OrderDetailPage() {
 
   const statusLabel = useMemo(() => {
     if (!order) return "";
-    return statusLabelMap[language][order.status as keyof (typeof statusLabelMap)["ko"]] || order.status;
+    return (
+      statusLabelMap[language][
+        order.status as keyof (typeof statusLabelMap)["ko"]
+      ] || order.status
+    );
   }, [order, language]);
 
   const canCancel =
@@ -265,6 +269,11 @@ export default function OrderDetailPage() {
   const handleToggleLanguage = async () => {
     if (!order) return;
 
+    const translateFailMessage =
+      language === "ja"
+        ? "翻訳に失敗しました。"
+        : "일본어 번역에 실패했습니다.";
+
     if (language === "ja") {
       setLanguage("ko");
       return;
@@ -292,7 +301,10 @@ export default function OrderDetailPage() {
 
         if (Array.isArray(item.variant?.options)) {
           for (const opt of item.variant.options) {
-            if (!translatedOptionNames[opt.value.option.id] && opt.value.option.name) {
+            if (
+              !translatedOptionNames[opt.value.option.id] &&
+              opt.value.option.name
+            ) {
               try {
                 const result = await translateText({
                   text: opt.value.option.name,
@@ -301,7 +313,8 @@ export default function OrderDetailPage() {
 
                 setTranslatedOptionNames((prev) => ({
                   ...prev,
-                  [opt.value.option.id]: result?.translatedText || opt.value.option.name,
+                  [opt.value.option.id]:
+                    result?.translatedText || opt.value.option.name,
                 }));
               } catch (error) {
                 console.error("옵션명 번역 실패:", error);
@@ -333,7 +346,9 @@ export default function OrderDetailPage() {
             text: order.address.recipient,
             direction: "koToJa",
           });
-          setTranslatedRecipient(result?.translatedText || order.address.recipient);
+          setTranslatedRecipient(
+            result?.translatedText || order.address.recipient
+          );
         } catch (error) {
           console.error("수령인 번역 실패:", error);
         }
@@ -345,7 +360,9 @@ export default function OrderDetailPage() {
             text: order.address.address1,
             direction: "koToJa",
           });
-          setTranslatedAddress1(result?.translatedText || order.address.address1);
+          setTranslatedAddress1(
+            result?.translatedText || order.address.address1
+          );
         } catch (error) {
           console.error("주소1 번역 실패:", error);
         }
@@ -357,7 +374,9 @@ export default function OrderDetailPage() {
             text: order.address.address2,
             direction: "koToJa",
           });
-          setTranslatedAddress2(result?.translatedText || order.address.address2);
+          setTranslatedAddress2(
+            result?.translatedText || order.address.address2
+          );
         } catch (error) {
           console.error("주소2 번역 실패:", error);
         }
@@ -378,12 +397,7 @@ export default function OrderDetailPage() {
       setLanguage("ja");
     } catch (error: any) {
       console.error("주문 상세 일본어 전환 실패:", error);
-      alert(
-        error?.response?.data?.message ||
-          (language === "ja"
-            ? "翻訳に失敗しました。"
-            : "일본어 번역에 실패했습니다.")
-      );
+      alert(error?.response?.data?.message || translateFailMessage);
     } finally {
       setDetailTranslating(false);
     }
@@ -467,26 +481,25 @@ export default function OrderDetailPage() {
 
               <div className="space-y-4">
                 {order.items.map((item) => {
-                  const optionText =
-                    item.variant?.options?.length
-                      ? item.variant.options
-                          .map((opt: OrderItemOption) => {
-                            const optionName =
-                              language === "ja"
-                                ? translatedOptionNames[opt.value.option.id] ||
-                                  opt.value.option.name
-                                : opt.value.option.name;
+                  const optionText = item.variant?.options?.length
+                    ? item.variant.options
+                        .map((opt: OrderItemOption) => {
+                          const optionName =
+                            language === "ja"
+                              ? translatedOptionNames[opt.value.option.id] ||
+                                opt.value.option.name
+                              : opt.value.option.name;
 
-                            const optionValue =
-                              language === "ja"
-                                ? translatedOptionValues[opt.value.id] ||
-                                  opt.value.value
-                                : opt.value.value;
+                          const optionValue =
+                            language === "ja"
+                              ? translatedOptionValues[opt.value.id] ||
+                                opt.value.value
+                              : opt.value.value;
 
-                            return `${optionName}: ${optionValue}`;
-                          })
-                          .join(" / ")
-                      : "";
+                          return `${optionName}: ${optionValue}`;
+                        })
+                        .join(" / ")
+                    : "";
 
                   const productName =
                     language === "ja"
@@ -538,12 +551,16 @@ export default function OrderDetailPage() {
                               {dt.quantity} {item.quantity}개
                             </span>
                             <span>
-                              {dt.itemPrice} {Number(item.price).toLocaleString()}원
+                              {dt.itemPrice}{" "}
+                              {Number(item.price).toLocaleString()}원
                             </span>
                           </div>
 
                           <div className="mt-2 text-lg font-bold">
-                            {(Number(item.price) * Number(item.quantity)).toLocaleString()}원
+                            {(
+                              Number(item.price) * Number(item.quantity)
+                            ).toLocaleString()}
+                            원
                           </div>
                         </div>
                       </div>
@@ -638,7 +655,9 @@ export default function OrderDetailPage() {
 
                       {order.trackingNumber && (
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-500">{dt.trackingNumber}</span>
+                          <span className="text-gray-500">
+                            {dt.trackingNumber}
+                          </span>
                           <span className="font-semibold">
                             {order.trackingNumber}
                           </span>
