@@ -1,28 +1,28 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const CHECKOUT_ORDER_KEY = "sewon_checkout_client_order_key";
 const CHECKOUT_CART_SIGNATURE_KEY = "sewon_checkout_cart_signature";
-const PAYPAY_MERCHANT_PAYMENT_ID_KEY = "sewon_paypay_merchant_payment_id";
 
-export default function PayPayFailPage() {
+function PayPayFailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const code = searchParams.get("code");
   const rawMessage = searchParams.get("message");
+  const merchantPaymentId = searchParams.get("merchantPaymentId");
+  const orderId = searchParams.get("orderId");
 
   const message = rawMessage
     ? decodeURIComponent(rawMessage)
-    : "다시 시도해주세요.";
+    : "PayPay 결제에 실패했습니다. 다시 시도해주세요.";
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       sessionStorage.removeItem(CHECKOUT_ORDER_KEY);
       sessionStorage.removeItem(CHECKOUT_CART_SIGNATURE_KEY);
-      sessionStorage.removeItem(PAYPAY_MERCHANT_PAYMENT_ID_KEY);
     }
   }, []);
 
@@ -36,7 +36,23 @@ export default function PayPayFailPage() {
           <p className="font-semibold mb-4">{code || "-"}</p>
 
           <p className="text-sm text-gray-500 mb-2">사유</p>
-          <p className="font-semibold">{message}</p>
+          <p className="font-semibold mb-4">{message}</p>
+
+          {merchantPaymentId && (
+            <>
+              <p className="text-sm text-gray-500 mb-2">PayPay 주문번호</p>
+              <p className="font-semibold mb-4 break-all">
+                {merchantPaymentId}
+              </p>
+            </>
+          )}
+
+          {orderId && (
+            <>
+              <p className="text-sm text-gray-500 mb-2">주문 ID</p>
+              <p className="font-semibold break-all">{orderId}</p>
+            </>
+          )}
         </div>
 
         <div className="flex flex-col gap-3">
@@ -48,6 +64,13 @@ export default function PayPayFailPage() {
           </button>
 
           <button
+            onClick={() => router.push("/checkout")}
+            className="w-full h-12 rounded-xl border border-gray-300 bg-white font-semibold"
+          >
+            다시 결제하기
+          </button>
+
+          <button
             onClick={() => router.push("/")}
             className="w-full h-12 rounded-xl border border-gray-300 bg-white font-semibold"
           >
@@ -56,5 +79,21 @@ export default function PayPayFailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PayPayFailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#f7f7f7] flex items-center justify-center px-4">
+          <p className="text-gray-500">
+            PayPay 결제 실패 페이지를 불러오는 중입니다...
+          </p>
+        </div>
+      }
+    >
+      <PayPayFailContent />
+    </Suspense>
   );
 }
