@@ -29,18 +29,9 @@ declare global {
         open: () => void;
       };
     };
-    daum?: {
-      Postcode: new (options: {
-        oncomplete: (data: any) => void;
-        onclose?: (state: string) => void;
-        width?: string | number;
-        height?: string | number;
-      }) => {
-        open: () => void;
-      };
-    };
+    daum?: any;
+    }
   }
-}
 
 const pageText = {
   ko: {
