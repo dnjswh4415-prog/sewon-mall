@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { confirmPayment } from "@/src/api/payments";
 
 const CHECKOUT_ORDER_KEY = "sewon_checkout_client_order_key";
 const CHECKOUT_CART_SIGNATURE_KEY = "sewon_checkout_cart_signature";
 
-export default function PaymentSuccessPage() {
+function PaymentSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const hasRunRef = useRef(false);
@@ -130,5 +130,24 @@ export default function PaymentSuccessPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function PaymentSuccessPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#f7f7f7] flex items-center justify-center px-4">
+          <div className="w-full max-w-md bg-white rounded-3xl border border-gray-200 p-8 text-center shadow-sm">
+            <h1 className="text-2xl font-bold mb-4">결제 확인 중</h1>
+            <p className="text-gray-600">
+              결제 완료 페이지를 불러오는 중입니다...
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <PaymentSuccessContent />
+    </Suspense>
   );
 }
