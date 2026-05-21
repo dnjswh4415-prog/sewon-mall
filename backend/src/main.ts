@@ -56,6 +56,8 @@ async function bootstrap() {
     express.static(join(process.cwd(), 'uploads'), {
       index: false,
       dotfiles: 'ignore',
+      maxAge: '14d',
+      immutable: true,
     }),
   );
 

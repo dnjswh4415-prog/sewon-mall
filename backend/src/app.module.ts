@@ -27,7 +27,7 @@ import { ExchangeRateModule } from './exchange-rate/exchange-rate.module';
     ThrottlerModule.forRoot([
       {
         ttl: 60_000,
-        limit: 20,
+        limit: 200,
       },
     ]),
     PrismaModule,
