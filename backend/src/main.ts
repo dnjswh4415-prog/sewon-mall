@@ -22,10 +22,20 @@ async function bootstrap() {
 
   app.getHttpAdapter().getInstance().disable('x-powered-by');
 
-  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:3000')
+  const defaultAllowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://129.154.50.160',
+  ];
+
+  const envAllowedOrigins = (process.env.CORS_ORIGINS ?? '')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+
+  const allowedOrigins = Array.from(
+    new Set([...defaultAllowedOrigins, ...envAllowedOrigins]),
+  );
 
   app.enableCors({
     origin: (origin, callback) => {
@@ -33,6 +43,7 @@ async function bootstrap() {
         return callback(null, true);
       }
 
+      console.log('Blocked by CORS:', origin);
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
@@ -64,4 +75,5 @@ async function bootstrap() {
   await app.listen(5000);
   console.log('Server running on http://localhost:5000/api');
 }
+
 bootstrap();
