@@ -27,89 +27,42 @@ type SortType =
   | "ratingDesc"
   | "salesDesc";
 
+const API_BASE_URL = "http://localhost:5000";
 const TRANSLATION_CACHE_KEY = "sewon_translation_cache_v1";
 
+/**
+ * 여기 이름은 DB category.name과 맞춰줘야 정상 동작함
+ */
 const BIG_CATEGORY_TREE: Record<string, string[]> = {
   입력장치: ["키보드", "마우스", "웹캠", "마이크", "게이밍액세서리"],
   오디오: ["헤드셋", "이어폰", "스피커"],
-  "디스플레이/모바일": [
-    "모니터",
-    "노트북",
-    "태블릿",
-    "스마트폰",
-    "스마트워치",
-  ],
+  "디스플레이/모바일": ["모니터", "노트북", "태블릿", "스마트폰", "스마트워치"],
   "전원/케이블": ["충전기", "케이블", "보조배터리"],
   "가구/생활": ["의자", "책상", "조명", "생활가전"],
-  PC부품: [
-    "저장장치",
-    "CPU",
-    "메인보드",
-    "그래픽카드",
-    "RAM",
-    "SSD",
-    "케이스",
-    "쿨러",
-  ],
+  PC부품: ["저장장치", "CPU", "메인보드", "그래픽카드", "RAM", "SSD", "케이스", "쿨러"],
   "사무/네트워크": ["프린터", "공유기"],
-  "스마트홈/보안": [
-    "스마트도어락",
-    "홈CCTV",
-    "스마트조명",
-    "스마트플러그",
-    "로봇청소기",
-  ],
-  차량용품: [
-    "블랙박스",
-    "차량충전기",
-    "차량거치대",
-    "차량청소기",
-    "차량공기청정기",
-  ],
+ "스마트홈/보안": ["스마트도어락", "홈CCTV", "스마트조명", "스마트플러그", "로봇청소기"],
+  차량용품: ["블랙박스", "차량충전기", "차량거치대", "차량청소기", "차량공기청정기"],
 };
 
-const BIG_CATEGORY_LABELS: Record<string, { ko: string; ja: string }> = {
+const BIG_CATEGORY_LABELS: Record<
+  string,
+  {
+    ko: string;
+    ja: string;
+  }
+> = {
   입력장치: { ko: "입력장치", ja: "入力機器" },
   오디오: { ko: "오디오", ja: "オーディオ" },
-  "디스플레이/모바일": {
-    ko: "디스플레이/모바일",
-    ja: "ディスプレイ/モバイル",
-  },
+  "디스플레이/모바일": { ko: "디스플레이/모바일", ja: "ディスプレイ/モバイル" },
   "전원/케이블": { ko: "전원/케이블", ja: "電源/ケーブル" },
   "가구/생활": { ko: "가구/생활", ja: "家具/生活" },
   PC부품: { ko: "PC부품", ja: "PCパーツ" },
-  "사무/네트워크": {
-    ko: "사무/네트워크",
-    ja: "事務/ネットワーク",
-  },
-  "스마트홈/보안": {
-    ko: "스마트홈/보안",
-    ja: "スマートホーム/セキュリティ",
-  },
+  "사무/네트워크": { ko: "사무/네트워크", ja: "事務/ネットワーク" },
+ // 새로 추가
+ "스마트홈/보안": { ko: "스마트홈/보안", ja: "スマートホーム/セキュリティ" },
   차량용품: { ko: "차량용품", ja: "カー用品" },
 };
-
-const BIG_CATEGORY_ALIASES: Record<string, string[]> = {
-  입력장치: ["입력장치", "입력", "키보드", "마우스", "게이밍기기"],
-  오디오: ["오디오", "음향", "소리", "사운드", "헤드셋", "이어폰", "스피커"],
-  "디스플레이/모바일": [
-    "디스플레이",
-    "모바일",
-    "핸드폰",
-    "휴대폰",
-    "스마트폰",
-    "모니터",
-    "노트북",
-    "태블릿",
-  ],
-  "전원/케이블": ["전원", "케이블", "충전", "충전기", "보조배터리"],
-  "가구/생활": ["가구", "생활", "생활용품", "의자", "책상", "조명"],
-  PC부품: ["pc부품", "피씨부품", "컴퓨터부품", "컴퓨터", "부품"],
-  "사무/네트워크": ["사무", "네트워크", "인터넷", "공유기", "프린터"],
-  "스마트홈/보안": ["스마트홈", "보안", "cctv", "홈보안"],
-  차량용품: ["차량용품", "차량용", "차량", "자동차", "카용품", "차량기기"],
-};
-
 const uiText = {
   ko: {
     favorite: "즐겨찾기",
@@ -244,7 +197,7 @@ export default function HomePage() {
   const [showCategoryPanel, setShowCategoryPanel] = useState(true);
 
   const [selectedBigCategory, setSelectedBigCategory] = useState<string>(
-    Object.keys(BIG_CATEGORY_TREE)[0] || "입력장치"
+    Object.keys(BIG_CATEGORY_TREE)[0] || "생활용품"
   );
   const [selectedSubCategoryId, setSelectedSubCategoryId] = useState<
     number | null
@@ -294,155 +247,39 @@ export default function HomePage() {
   };
 
   const normalizeImageUrl = (url?: string | null) => {
-    if (!url || url === "/no-image.png") return "/no-image.png";
+    if (!url) return "/no-image.png";
 
     if (url.startsWith("http://") || url.startsWith("https://")) {
       return url;
     }
 
     if (url.startsWith("/uploads/")) {
-      return url;
+      return `${API_BASE_URL}${url}`;
     }
 
     if (url.startsWith("uploads/")) {
-      return `/${url}`;
+      return `${API_BASE_URL}/${url}`;
     }
 
-    if (url.startsWith("/images/")) {
-      return url;
-    }
-
-    if (url.startsWith("images/")) {
-      return `/${url}`;
-    }
-
-    if (url.startsWith("/")) {
-      return url;
-    }
-
-    return `/${url}`;
+    return "/no-image.png";
   };
 
   const getThumbnailSrc = (product: any) => {
-    const images = Array.isArray(product?.images) ? [...product.images] : [];
-    const productImages = Array.isArray(product?.productImages)
-      ? [...product.productImages]
+    const sortedImages = Array.isArray(product?.images)
+      ? [...product.images].sort(
+          (a: any, b: any) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0)
+        )
       : [];
-
-    const sortImageList = (list: any[]) => {
-      return [...list].sort((a: any, b: any) => {
-        if (a?.isMain && !b?.isMain) return -1;
-        if (!a?.isMain && b?.isMain) return 1;
-
-        const sortA = Number(a?.sortOrder ?? 0);
-        const sortB = Number(b?.sortOrder ?? 0);
-
-        if (sortA !== sortB) return sortA - sortB;
-        return Number(a?.id ?? 0) - Number(b?.id ?? 0);
-      });
-    };
-
-    const sortedImages = sortImageList(images);
-    const sortedProductImages = sortImageList(productImages);
 
     const raw =
       product?.imageUrl ||
       sortedImages.find((img: any) => img?.isMain)?.imageUrl ||
       sortedImages[0]?.imageUrl ||
-      sortedProductImages.find((img: any) => img?.isMain)?.imageUrl ||
-      sortedProductImages[0]?.imageUrl ||
+      product?.productImages?.find((img: any) => img?.isMain)?.imageUrl ||
+      product?.productImages?.[0]?.imageUrl ||
       "";
 
     return normalizeImageUrl(raw);
-  };
-
-  const normalizeSearchText = (value: string) => {
-    return String(value || "")
-      .trim()
-      .replace(/\s+/g, "")
-      .toLowerCase();
-  };
-
-  const findCategoryBySearchKeyword = (keyword: string) => {
-    const normalizedKeyword = normalizeSearchText(keyword);
-
-    if (!normalizedKeyword) return null;
-
-    for (const bigCategory of bigCategories) {
-      const normalizedBigCategory = normalizeSearchText(bigCategory);
-      const bigCategoryLabelKo = normalizeSearchText(
-        BIG_CATEGORY_LABELS[bigCategory]?.ko || bigCategory
-      );
-      const bigCategoryLabelJa = normalizeSearchText(
-        BIG_CATEGORY_LABELS[bigCategory]?.ja || ""
-      );
-      const aliases = BIG_CATEGORY_ALIASES[bigCategory] || [];
-
-      const isBigCategoryMatched =
-        normalizedBigCategory.includes(normalizedKeyword) ||
-        normalizedKeyword.includes(normalizedBigCategory) ||
-        bigCategoryLabelKo.includes(normalizedKeyword) ||
-        normalizedKeyword.includes(bigCategoryLabelKo) ||
-        bigCategoryLabelJa.includes(normalizedKeyword) ||
-        normalizedKeyword.includes(bigCategoryLabelJa) ||
-        aliases.some((alias) => {
-          const normalizedAlias = normalizeSearchText(alias);
-
-          return (
-            normalizedAlias.includes(normalizedKeyword) ||
-            normalizedKeyword.includes(normalizedAlias)
-          );
-        });
-
-      if (isBigCategoryMatched) {
-        return {
-          bigCategory,
-          subCategoryId: null,
-        };
-      }
-
-      const subCategoryNames = BIG_CATEGORY_TREE[bigCategory] || [];
-
-      for (const subCategoryName of subCategoryNames) {
-        const normalizedSubCategoryName = normalizeSearchText(subCategoryName);
-
-        const isSubCategoryNameMatched =
-          normalizedSubCategoryName.includes(normalizedKeyword) ||
-          normalizedKeyword.includes(normalizedSubCategoryName);
-
-        if (isSubCategoryNameMatched) {
-          const matchedDbCategory = categories.find(
-            (cat) => cat.name === subCategoryName
-          );
-
-          return {
-            bigCategory,
-            subCategoryId: matchedDbCategory
-              ? Number(matchedDbCategory.id)
-              : null,
-          };
-        }
-      }
-
-      const matchedDbCategory = categories.find((cat) => {
-        const categoryName = normalizeSearchText(cat.name);
-
-        return (
-          subCategoryNames.includes(cat.name) &&
-          (categoryName.includes(normalizedKeyword) ||
-            normalizedKeyword.includes(categoryName))
-        );
-      });
-
-      if (matchedDbCategory) {
-        return {
-          bigCategory,
-          subCategoryId: Number(matchedDbCategory.id),
-        };
-      }
-    }
-
-    return null;
   };
 
   useEffect(() => {
@@ -542,12 +379,6 @@ export default function HomePage() {
   }, [categories, selectedBigCategory]);
 
   const filteredProducts = useMemo(() => {
-    const isSearchMode = search.trim().length > 0;
-
-    if (isSearchMode) {
-      return products;
-    }
-
     const targetSubCategoryNames = new Set(
       BIG_CATEGORY_TREE[selectedBigCategory] ?? []
     );
@@ -556,7 +387,6 @@ export default function HomePage() {
       const productCategoryId = Number(
         product?.Category?.id ?? product?.category?.id ?? 0
       );
-
       const productCategoryName =
         product?.Category?.name || product?.category?.name || "";
 
@@ -569,7 +399,7 @@ export default function HomePage() {
 
       return matchesBigCategory && matchesSubCategory;
     });
-  }, [products, search, selectedBigCategory, selectedSubCategoryId]);
+  }, [products, selectedBigCategory, selectedSubCategoryId]);
 
   const sortedProducts = useMemo(() => {
     const copied = [...filteredProducts];
@@ -602,7 +432,6 @@ export default function HomePage() {
   useEffect(() => {
     const pages = Math.max(1, Math.ceil(sortedProducts.length / 20));
     setTotalPages(pages);
-
     if (page > pages) {
       setPage(1);
     }
@@ -763,47 +592,19 @@ export default function HomePage() {
     }
   };
 
-  const handleLogoClick = () => {
-    window.location.href = "/";
-  };
-
   const handleSearch = () => {
-    const keyword = searchInput.trim();
-
-    if (!keyword) {
-      setSearch("");
-      setPage(1);
-      return;
-    }
-
-    const matchedCategory = findCategoryBySearchKeyword(keyword);
-
-    if (matchedCategory) {
-      setSelectedBigCategory(matchedCategory.bigCategory);
-      setSelectedSubCategoryId(matchedCategory.subCategoryId);
-      setSearch("");
-      setSearchInput("");
-      setPage(1);
-      return;
-    }
-
-    setSearch(keyword);
-    setSelectedSubCategoryId(null);
+    setSearch(searchInput.trim());
     setPage(1);
   };
 
   const handleBigCategoryClick = (bigCategory: string) => {
     setSelectedBigCategory(bigCategory);
     setSelectedSubCategoryId(null);
-    setSearch("");
-    setSearchInput("");
     setPage(1);
   };
 
   const handleSubCategoryClick = (id: number | null) => {
     setSelectedSubCategoryId(id);
-    setSearch("");
-    setSearchInput("");
     setPage(1);
   };
 
@@ -838,9 +639,7 @@ export default function HomePage() {
       : selectedSubCategoryName;
 
   const currentCategoryLabel =
-    search.trim().length > 0
-      ? `${t.searchKeyword}: ${search}`
-      : selectedSubCategoryId == null
+    selectedSubCategoryId == null
       ? `${translatedBigCategoryName}`
       : language === "ja"
       ? translatedSelectedSubCategoryName || translatedBigCategoryName
@@ -857,7 +656,6 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-[#f7f7f7] text-gray-900">
       <MainPopupBanner />
-
       <div className="bg-[#f1f1f1] border-b border-gray-200">
         <div className="max-w-7xl mx-auto h-10 px-4 flex items-center justify-between text-sm text-gray-600">
           <div className="flex items-center gap-5">
@@ -877,14 +675,12 @@ export default function HomePage() {
                 >
                   {t.login}
                 </button>
-
                 <button
                   onClick={() => router.push("/signup")}
                   className="hover:text-black"
                 >
                   {t.signup}
                 </button>
-
                 <button
                   onClick={() => router.push("/find-email")}
                   className="hover:text-black"
@@ -923,7 +719,6 @@ export default function HomePage() {
           <div className="flex items-center gap-5">
             <button className="hover:text-black">{t.inquiry}</button>
             <button className="hover:text-black">{t.support}</button>
-
             <button
               onClick={handleToggleLanguage}
               disabled={pageTranslating}
@@ -939,7 +734,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 h-[142px] flex items-center justify-between gap-8">
           <div className="w-[260px] shrink-0">
             <h1
-              onClick={handleLogoClick}
+              onClick={() => router.push("/")}
               className="text-[42px] leading-none font-extrabold tracking-[-0.03em] cursor-pointer text-black"
             >
               sewon-mall
@@ -958,7 +753,6 @@ export default function HomePage() {
                 }}
                 className="w-full h-[52px] rounded-full border-[3px] border-[#666] bg-white pl-6 pr-16 text-[20px] outline-none placeholder:text-gray-500"
               />
-
               <button
                 onClick={handleSearch}
                 className="absolute right-5 top-1/2 -translate-y-1/2 text-black"
@@ -981,7 +775,6 @@ export default function HomePage() {
                   </span>
                 )}
               </div>
-
               <span className="mt-2 text-[14px]">{t.cart}</span>
             </button>
 
@@ -1004,6 +797,7 @@ export default function HomePage() {
         </div>
       </header>
 
+      {/* 상단 큰 카테고리 */}
       <section className="bg-white border-y border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap gap-2">
           {bigCategories.map((bigCategory) => {
@@ -1034,13 +828,8 @@ export default function HomePage() {
               <div className="bg-white rounded-2xl border border-gray-200 p-4 sticky top-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">
-                      {t.bigCategory}
-                    </p>
-
-                    <h3 className="text-lg font-bold">
-                      {translatedBigCategoryName}
-                    </h3>
+                    <p className="text-xs text-gray-500 mb-1">{t.bigCategory}</p>
+                    <h3 className="text-lg font-bold">{translatedBigCategoryName}</h3>
                   </div>
 
                   <button
@@ -1087,42 +876,42 @@ export default function HomePage() {
             </aside>
           )}
 
-          <section className="flex-1">
+          <section className="flex-1 min-w-0">
             {!showCategoryPanel && (
-              <button
-                onClick={() => setShowCategoryPanel(true)}
-                className="mb-4 px-4 py-2 rounded-xl bg-white border border-gray-200 text-sm"
-              >
-                {t.openCategory}
-              </button>
+              <div className="mb-4">
+                <button
+                  onClick={() => setShowCategoryPanel(true)}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-xl hover:bg-gray-50"
+                >
+                  {t.openCategory}
+                </button>
+              </div>
             )}
 
-            <div className="mb-5 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-              <div>
-                <p className="text-sm text-gray-500">{t.selectedCategory}</p>
-                <h2 className="text-2xl font-bold">{currentCategoryLabel}</h2>
-              </div>
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-6">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">{t.selectedCategory}</p>
+                  <h3 className="text-2xl font-bold">{currentCategoryLabel}</h3>
+                  {search && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {t.searchKeyword}:{" "}
+                      <span className="font-medium">{search}</span>
+                    </p>
+                  )}
+                </div>
 
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { key: "latest", label: t.latest },
-                  { key: "priceAsc", label: t.priceAsc },
-                  { key: "priceDesc", label: t.priceDesc },
-                  { key: "salesDesc", label: t.salesDesc },
-                  { key: "ratingDesc", label: t.ratingDesc },
-                ].map((item) => (
-                  <button
-                    key={item.key}
-                    onClick={() => setSortBy(item.key as SortType)}
-                    className={`px-4 py-2 rounded-xl text-sm border ${
-                      sortBy === item.key
-                        ? "bg-black text-white border-black"
-                        : "bg-white border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SortType)}
+                  className="border border-gray-300 rounded-xl px-4 py-3 bg-white"
+                >
+                  <option value="latest">{t.latest}</option>
+                  <option value="priceAsc">{t.priceAsc}</option>
+                  <option value="priceDesc">{t.priceDesc}</option>
+                  <option value="salesDesc">{t.salesDesc}</option>
+                  <option value="ratingDesc">{t.ratingDesc}</option>
+                </select>
               </div>
             </div>
 
@@ -1135,84 +924,96 @@ export default function HomePage() {
                 {t.emptyProducts}
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
                 {pagedProducts.map((product) => {
-                  const wished = wishlistIds.includes(product.id);
-                  const productName =
+                  const isSoldOut = Number(product.stock) === 0;
+                  const thumbnail = getThumbnailSrc(product);
+                  const translatedName =
                     language === "ja"
                       ? translatedNames[product.id] || product.name
                       : product.name;
 
+                  const productCategoryName =
+                    language === "ja"
+                      ? translatedCategoryNames[product.Category?.id] ||
+                        product.Category?.name ||
+                        translatedBigCategoryName
+                      : product.Category?.name || selectedBigCategory;
+
                   return (
                     <div
                       key={product.id}
-                      className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-md transition group"
+                      onClick={() => router.push(`/products/${product.id}`)}
+                      className="group relative bg-white rounded-2xl border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden"
                     >
-                      <div
-                        onClick={() => router.push(`/products/${product.id}`)}
-                        className="relative aspect-square bg-gray-100 cursor-pointer"
+                      {isSoldOut && (
+                        <div className="absolute inset-0 bg-black/55 flex items-center justify-center z-20">
+                          <span className="text-white text-lg font-bold">
+                            {t.soldOut}
+                          </span>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleWishlist(product.id);
+                        }}
+                        className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-white/90 border border-gray-200 flex items-center justify-center hover:bg-white"
                       >
+                        <Heart
+                          size={18}
+                          className={
+                            wishlistIds.includes(product.id)
+                              ? "fill-red-500 text-red-500"
+                              : "text-gray-400"
+                          }
+                        />
+                      </button>
+
+                      <div className="aspect-square bg-[#f1f1f1] overflow-hidden">
                         <img
-                          src={getThumbnailSrc(product)}
+                          src={thumbnail}
                           alt={product.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition"
+                          className="block h-full w-full object-cover"
                           onError={(e) => {
-                            e.currentTarget.src = "/no-image.png";
+                            const target = e.currentTarget;
+                            if (!target.src.endsWith("/no-image.png")) {
+                              target.src = "/no-image.png";
+                            }
                           }}
                         />
-
-                        {Number(product.stock || 0) <= 0 && (
-                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-bold">
-                            {t.soldOut}
-                          </div>
-                        )}
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleWishlist(product.id);
-                          }}
-                          className={`absolute top-3 right-3 w-10 h-10 rounded-full flex items-center justify-center shadow ${
-                            wished
-                              ? "bg-red-500 text-white"
-                              : "bg-white text-gray-600"
-                          }`}
-                        >
-                          <Heart
-                            size={20}
-                            fill={wished ? "currentColor" : "none"}
-                          />
-                        </button>
                       </div>
 
                       <div className="p-4">
-                        <button
-                          onClick={() => router.push(`/products/${product.id}`)}
-                          className="text-left w-full"
-                        >
-                          <h3 className="font-semibold line-clamp-2 min-h-[48px]">
-                            {productName}
-                          </h3>
-                        </button>
+                        <div className="mb-2">
+                          <p className="text-xs text-gray-500 mb-1">
+                            {productCategoryName}
+                          </p>
+                          <h5 className="font-semibold text-sm leading-5 line-clamp-2 min-h-[40px]">
+                            {translatedName}
+                          </h5>
+                        </div>
 
-                        <div className="mt-2 flex items-center gap-2">
-                          <StarRating rating={Number(product.avgRating || 0)} />
-
+                        <div className="flex items-center gap-2 mb-3">
+                          <StarRating rating={product.avgRating || 0} />
                           <span className="text-xs text-gray-500">
-                            {Number(product.avgRating || 0).toFixed(1)}
+                            ({product.reviewCount || 0})
                           </span>
                         </div>
 
-                        <div className="mt-3 flex items-end justify-between gap-2">
-                          <div>
-                            <p className="font-bold text-lg">
-                              {Number(product.price || 0).toLocaleString()}원
-                            </p>
+                        <div className="space-y-1">
+                          <p className="text-lg font-bold">
+                            {Number(product.price).toLocaleString()}원
+                          </p>
 
-                            <p className="text-xs text-gray-500">
-                              {t.stock} {product.stock ?? 0} · {t.sales}{" "}
-                              {product.salesCount ?? 0}
-                            </p>
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <span>
+                              {t.stock} {product.stock ?? 0}
+                            </span>
+                            <span>
+                              {t.sales} {product.salesCount || 0}
+                            </span>
                           </div>
                         </div>
                       </div>

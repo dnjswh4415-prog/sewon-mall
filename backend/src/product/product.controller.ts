@@ -66,7 +66,10 @@ export class ProductController {
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/view')
-  recordView(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
+  recordView(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     const userId = this.getUserId(req);
 
     if (!userId) {

@@ -9,121 +9,9 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { expandSearchKeywords } from './search-keyword-map';
 
-const BIG_CATEGORY_TREE: Record<string, string[]> = {
-  입력장치: ['키보드', '마우스', '웹캠', '마이크', '게이밍액세서리'],
-  오디오: ['헤드셋', '이어폰', '스피커'],
-  '디스플레이/모바일': [
-    '모니터',
-    '노트북',
-    '태블릿',
-    '스마트폰',
-    '스마트워치',
-  ],
-  '전원/케이블': ['충전기', '케이블', '보조배터리'],
-  '가구/생활': ['의자', '책상', '조명', '생활가전'],
-  PC부품: [
-    '저장장치',
-    'CPU',
-    '메인보드',
-    '그래픽카드',
-    'RAM',
-    'SSD',
-    '케이스',
-    '쿨러',
-  ],
-  '사무/네트워크': ['프린터', '공유기'],
-  '스마트홈/보안': [
-    '스마트도어락',
-    '홈CCTV',
-    '스마트조명',
-    '스마트플러그',
-    '로봇청소기',
-  ],
-  차량용품: [
-    '블랙박스',
-    '차량충전기',
-    '차량거치대',
-    '차량청소기',
-    '차량공기청정기',
-  ],
-};
-
-const BIG_CATEGORY_ALIASES: Record<string, string[]> = {
-  입력장치: ['입력장치', '입력', '키보드마우스', '게이밍기기'],
-  오디오: ['오디오', '음향', '소리', '사운드'],
-  '디스플레이/모바일': [
-    '디스플레이',
-    '모바일',
-    '핸드폰',
-    '휴대폰',
-    '스마트폰',
-  ],
-  '전원/케이블': ['전원', '케이블', '충전', '충전기'],
-  '가구/생활': ['가구', '생활', '생활용품'],
-  PC부품: ['pc부품', '피씨부품', '컴퓨터부품', '컴퓨터', '부품'],
-  '사무/네트워크': ['사무', '네트워크', '인터넷', '공유기'],
-  '스마트홈/보안': ['스마트홈', '보안', 'cctv', '홈보안'],
-  차량용품: ['차량용품', '차량용', '차량', '자동차', '카용품', '차량기기'],
-};
-
 @Injectable()
 export class ProductService {
   constructor(private readonly prisma: PrismaService) {}
-
-  private normalizeSearchText(value?: string | null) {
-    return String(value ?? '')
-      .trim()
-      .replace(/\s+/g, '')
-      .toLowerCase();
-  }
-
-  private getCategoryNamesByKeyword(keyword?: string | null) {
-    const normalizedKeyword = this.normalizeSearchText(keyword);
-
-    if (!normalizedKeyword) {
-      return [];
-    }
-
-    const matchedCategoryNames = new Set<string>();
-
-    for (const [bigCategory, subCategories] of Object.entries(
-      BIG_CATEGORY_TREE,
-    )) {
-      const normalizedBigCategory = this.normalizeSearchText(bigCategory);
-      const aliases = BIG_CATEGORY_ALIASES[bigCategory] ?? [];
-
-      const isBigCategoryMatched =
-        normalizedBigCategory.includes(normalizedKeyword) ||
-        normalizedKeyword.includes(normalizedBigCategory) ||
-        aliases.some((alias) => {
-          const normalizedAlias = this.normalizeSearchText(alias);
-
-          return (
-            normalizedAlias.includes(normalizedKeyword) ||
-            normalizedKeyword.includes(normalizedAlias)
-          );
-        });
-
-      if (isBigCategoryMatched) {
-        subCategories.forEach((name) => matchedCategoryNames.add(name));
-        continue;
-      }
-
-      for (const subCategory of subCategories) {
-        const normalizedSubCategory = this.normalizeSearchText(subCategory);
-
-        const isSubCategoryMatched =
-          normalizedSubCategory.includes(normalizedKeyword) ||
-          normalizedKeyword.includes(normalizedSubCategory);
-
-        if (isSubCategoryMatched) {
-          matchedCategoryNames.add(subCategory);
-        }
-      }
-    }
-
-    return [...matchedCategoryNames];
-  }
 
   private enrichProductSummary(product: any) {
     const reviewCount = product.reviews.length;
@@ -301,43 +189,34 @@ export class ProductService {
   }
 
   async getProducts(params?: { categoryId?: number; keyword?: string }) {
-    const keyword = String(params?.keyword ?? '').trim();
-    const keywords = expandSearchKeywords(keyword);
-    const categoryNamesByKeyword = this.getCategoryNamesByKeyword(keyword);
+    const keywords = expandSearchKeywords(params?.keyword);
 
     const andConditions: Prisma.ProductWhereInput[] = [];
 
-    /**
-     * 핵심:
-     * 검색어가 있을 때는 categoryId를 무시한다.
-     * 그래야 입력장치 카테고리에서 "차량용"을 검색해도 전체 상품 기준으로 검색된다.
-     */
-    if (params?.categoryId && !keyword) {
+    if (params?.categoryId) {
       andConditions.push({
         categoryId: Number(params.categoryId),
       });
     }
 
-    if (keywords.length > 0 || categoryNamesByKeyword.length > 0) {
-      const searchOr: Prisma.ProductWhereInput[] = [];
-
-      for (const currentKeyword of keywords) {
-        searchOr.push(
+    if (keywords.length > 0) {
+      const searchOr: Prisma.ProductWhereInput[] = keywords.flatMap(
+        (keyword) => [
           {
             name: {
-              contains: currentKeyword,
+              contains: keyword,
             },
           },
           {
             description: {
-              contains: currentKeyword,
+              contains: keyword,
             },
           },
           {
             Category: {
               is: {
                 name: {
-                  contains: currentKeyword,
+                  contains: keyword,
                 },
               },
             },
@@ -346,7 +225,7 @@ export class ProductService {
             options: {
               some: {
                 name: {
-                  contains: currentKeyword,
+                  contains: keyword,
                 },
               },
             },
@@ -357,27 +236,15 @@ export class ProductService {
                 values: {
                   some: {
                     value: {
-                      contains: currentKeyword,
+                      contains: keyword,
                     },
                   },
                 },
               },
             },
           },
-        );
-      }
-
-      if (categoryNamesByKeyword.length > 0) {
-        searchOr.push({
-          Category: {
-            is: {
-              name: {
-                in: categoryNamesByKeyword,
-              },
-            },
-          },
-        });
-      }
+        ],
+      );
 
       andConditions.push({
         OR: searchOr,
