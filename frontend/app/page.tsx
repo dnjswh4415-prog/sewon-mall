@@ -27,7 +27,7 @@ type SortType =
   | "ratingDesc"
   | "salesDesc";
 
-const API_BASE_URL = "http://localhost:5000";
+const API_BASE_URL = "http://129.154.50.160";
 const TRANSLATION_CACHE_KEY = "sewon_translation_cache_v1";
 
 /**
