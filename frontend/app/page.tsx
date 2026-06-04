@@ -35,24 +35,60 @@ const TRANSLATION_CACHE_KEY = "sewon_translation_cache_v1";
 const BIG_CATEGORY_TREE: Record<string, string[]> = {
   입력장치: ["키보드", "마우스", "웹캠", "마이크", "게이밍액세서리"],
   오디오: ["헤드셋", "이어폰", "스피커"],
-  "디스플레이/모바일": ["모니터", "노트북", "태블릿", "스마트폰", "스마트워치"],
+  "디스플레이/모바일": [
+    "모니터",
+    "노트북",
+    "태블릿",
+    "스마트폰",
+    "스마트워치",
+  ],
   "전원/케이블": ["충전기", "케이블", "보조배터리"],
   "가구/생활": ["의자", "책상", "조명", "생활가전"],
-  PC부품: ["저장장치", "CPU", "메인보드", "그래픽카드", "RAM", "SSD", "케이스", "쿨러"],
+  PC부품: [
+    "저장장치",
+    "CPU",
+    "메인보드",
+    "그래픽카드",
+    "RAM",
+    "SSD",
+    "케이스",
+    "쿨러",
+  ],
   "사무/네트워크": ["프린터", "공유기"],
-  "스마트홈/보안": ["스마트도어락", "홈CCTV", "스마트조명", "스마트플러그", "로봇청소기"],
-  차량용품: ["블랙박스", "차량충전기", "차량거치대", "차량청소기", "차량공기청정기"],
+  "스마트홈/보안": [
+    "스마트도어락",
+    "홈CCTV",
+    "스마트조명",
+    "스마트플러그",
+    "로봇청소기",
+  ],
+  차량용품: [
+    "블랙박스",
+    "차량충전기",
+    "차량거치대",
+    "차량청소기",
+    "차량공기청정기",
+  ],
 };
 
 const BIG_CATEGORY_LABELS: Record<string, { ko: string; ja: string }> = {
   입력장치: { ko: "입력장치", ja: "入力機器" },
   오디오: { ko: "오디오", ja: "オーディオ" },
-  "디스플레이/모바일": { ko: "디스플레이/모바일", ja: "ディスプレイ/モバイル" },
+  "디스플레이/모바일": {
+    ko: "디스플레이/모바일",
+    ja: "ディスプレイ/モバイル",
+  },
   "전원/케이블": { ko: "전원/케이블", ja: "電源/ケーブル" },
   "가구/생활": { ko: "가구/생활", ja: "家具/生活" },
   PC부품: { ko: "PC부품", ja: "PCパーツ" },
-  "사무/네트워크": { ko: "사무/네트워크", ja: "事務/ネットワーク" },
-  "스마트홈/보안": { ko: "스마트홈/보안", ja: "スマートホーム/セキュリティ" },
+  "사무/네트워크": {
+    ko: "사무/네트워크",
+    ja: "事務/ネットワーク",
+  },
+  "스마트홈/보안": {
+    ko: "스마트홈/보안",
+    ja: "スマートホーム/セキュリティ",
+  },
   차량용품: { ko: "차량용품", ja: "カー用品" },
 };
 
@@ -190,7 +226,7 @@ export default function HomePage() {
   const [showCategoryPanel, setShowCategoryPanel] = useState(true);
 
   const [selectedBigCategory, setSelectedBigCategory] = useState<string>(
-    Object.keys(BIG_CATEGORY_TREE)[0] || "생활용품"
+    Object.keys(BIG_CATEGORY_TREE)[0] || "입력장치"
   );
   const [selectedSubCategoryId, setSelectedSubCategoryId] = useState<
     number | null
@@ -240,7 +276,7 @@ export default function HomePage() {
   };
 
   const normalizeImageUrl = (url?: string | null) => {
-    if (!url) return "/no-image.png";
+    if (!url || url === "/no-image.png") return "/no-image.png";
 
     if (url.startsWith("http://") || url.startsWith("https://")) {
       return url;
@@ -254,25 +290,143 @@ export default function HomePage() {
       return `${API_BASE_URL}/${url}`;
     }
 
-    return "/no-image.png";
+    if (url.startsWith("/images/")) {
+      return url;
+    }
+
+    if (url.startsWith("images/")) {
+      return `/${url}`;
+    }
+
+    if (url.startsWith("/")) {
+      return `${API_BASE_URL}${url}`;
+    }
+
+    return `${API_BASE_URL}/${url}`;
   };
 
   const getThumbnailSrc = (product: any) => {
-    const sortedImages = Array.isArray(product?.images)
-      ? [...product.images].sort(
-          (a: any, b: any) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0)
-        )
+    const images = Array.isArray(product?.images) ? [...product.images] : [];
+    const productImages = Array.isArray(product?.productImages)
+      ? [...product.productImages]
       : [];
 
+    const sortedImages = images.sort((a: any, b: any) => {
+      if (a?.isMain && !b?.isMain) return -1;
+      if (!a?.isMain && b?.isMain) return 1;
+
+      const sortA = Number(a?.sortOrder ?? 0);
+      const sortB = Number(b?.sortOrder ?? 0);
+
+      if (sortA !== sortB) return sortA - sortB;
+      return Number(a?.id ?? 0) - Number(b?.id ?? 0);
+    });
+
+    const sortedProductImages = productImages.sort((a: any, b: any) => {
+      if (a?.isMain && !b?.isMain) return -1;
+      if (!a?.isMain && b?.isMain) return 1;
+
+      const sortA = Number(a?.sortOrder ?? 0);
+      const sortB = Number(b?.sortOrder ?? 0);
+
+      if (sortA !== sortB) return sortA - sortB;
+      return Number(a?.id ?? 0) - Number(b?.id ?? 0);
+    });
+
     const raw =
-      product?.imageUrl ||
       sortedImages.find((img: any) => img?.isMain)?.imageUrl ||
       sortedImages[0]?.imageUrl ||
-      product?.productImages?.find((img: any) => img?.isMain)?.imageUrl ||
-      product?.productImages?.[0]?.imageUrl ||
+      sortedProductImages.find((img: any) => img?.isMain)?.imageUrl ||
+      sortedProductImages[0]?.imageUrl ||
+      product?.imageUrl ||
       "";
 
     return normalizeImageUrl(raw);
+  };
+
+  const normalizeSearchText = (value: string) => {
+    return String(value || "")
+      .trim()
+      .replace(/\s+/g, "")
+      .toLowerCase();
+  };
+
+  const findCategoryBySearchKeyword = (keyword: string) => {
+    const normalizedKeyword = normalizeSearchText(keyword);
+
+    if (!normalizedKeyword) {
+      return null;
+    }
+
+    for (const bigCategory of bigCategories) {
+      const normalizedBigCategory = normalizeSearchText(bigCategory);
+      const bigCategoryLabelKo = normalizeSearchText(
+        BIG_CATEGORY_LABELS[bigCategory]?.ko || bigCategory
+      );
+      const bigCategoryLabelJa = normalizeSearchText(
+        BIG_CATEGORY_LABELS[bigCategory]?.ja || ""
+      );
+
+      const isBigCategoryMatched =
+        normalizedBigCategory.includes(normalizedKeyword) ||
+        normalizedKeyword.includes(normalizedBigCategory) ||
+        bigCategoryLabelKo.includes(normalizedKeyword) ||
+        normalizedKeyword.includes(bigCategoryLabelKo) ||
+        bigCategoryLabelJa.includes(normalizedKeyword) ||
+        normalizedKeyword.includes(bigCategoryLabelJa);
+
+      if (isBigCategoryMatched) {
+        return {
+          type: "big" as const,
+          bigCategory,
+          subCategoryId: null,
+        };
+      }
+
+      const subCategoryNames = BIG_CATEGORY_TREE[bigCategory] || [];
+
+      for (const subCategoryName of subCategoryNames) {
+        const normalizedSubCategoryName = normalizeSearchText(subCategoryName);
+
+        const isSubCategoryNameMatched =
+          normalizedSubCategoryName.includes(normalizedKeyword) ||
+          normalizedKeyword.includes(normalizedSubCategoryName);
+
+        if (isSubCategoryNameMatched) {
+          const matchedDbCategory = categories.find(
+            (cat) => cat.name === subCategoryName
+          );
+
+          return {
+            type: "sub" as const,
+            bigCategory,
+            subCategoryId: matchedDbCategory
+              ? Number(matchedDbCategory.id)
+              : null,
+          };
+        }
+      }
+
+      const matchedDbCategory = categories.find((cat) => {
+        const categoryName = normalizeSearchText(cat.name);
+
+        return (
+          subCategoryNames.includes(cat.name) &&
+          (categoryName.includes(normalizedKeyword) ||
+            normalizedKeyword.includes(categoryName))
+        );
+      });
+
+      if (matchedDbCategory) {
+        return {
+          type: "sub" as const,
+          bigCategory,
+          subCategoryId: Number(matchedDbCategory.id),
+        };
+      }
+    }
+
+    return null;
   };
 
   useEffect(() => {
@@ -431,6 +585,7 @@ export default function HomePage() {
   useEffect(() => {
     const pages = Math.max(1, Math.ceil(sortedProducts.length / 20));
     setTotalPages(pages);
+
     if (page > pages) {
       setPage(1);
     }
@@ -596,18 +751,42 @@ export default function HomePage() {
   };
 
   const handleSearch = () => {
-    setSearch(searchInput.trim());
+    const keyword = searchInput.trim();
+
+    if (!keyword) {
+      setSearch("");
+      setPage(1);
+      return;
+    }
+
+    const matchedCategory = findCategoryBySearchKeyword(keyword);
+
+    if (matchedCategory) {
+      setSelectedBigCategory(matchedCategory.bigCategory);
+      setSelectedSubCategoryId(matchedCategory.subCategoryId);
+      setSearch("");
+      setSearchInput("");
+      setPage(1);
+      return;
+    }
+
+    setSearch(keyword);
+    setSelectedSubCategoryId(null);
     setPage(1);
   };
 
   const handleBigCategoryClick = (bigCategory: string) => {
     setSelectedBigCategory(bigCategory);
     setSelectedSubCategoryId(null);
+    setSearch("");
+    setSearchInput("");
     setPage(1);
   };
 
   const handleSubCategoryClick = (id: number | null) => {
     setSelectedSubCategoryId(id);
+    setSearch("");
+    setSearchInput("");
     setPage(1);
   };
 
@@ -681,12 +860,14 @@ export default function HomePage() {
                 >
                   {t.login}
                 </button>
+
                 <button
                   onClick={() => router.push("/signup")}
                   className="hover:text-black"
                 >
                   {t.signup}
                 </button>
+
                 <button
                   onClick={() => router.push("/find-email")}
                   className="hover:text-black"
@@ -725,6 +906,7 @@ export default function HomePage() {
           <div className="flex items-center gap-5">
             <button className="hover:text-black">{t.inquiry}</button>
             <button className="hover:text-black">{t.support}</button>
+
             <button
               onClick={handleToggleLanguage}
               disabled={pageTranslating}
@@ -759,6 +941,7 @@ export default function HomePage() {
                 }}
                 className="w-full h-[52px] rounded-full border-[3px] border-[#666] bg-white pl-6 pr-16 text-[20px] outline-none placeholder:text-gray-500"
               />
+
               <button
                 onClick={handleSearch}
                 className="absolute right-5 top-1/2 -translate-y-1/2 text-black"
@@ -781,6 +964,7 @@ export default function HomePage() {
                   </span>
                 )}
               </div>
+
               <span className="mt-2 text-[14px]">{t.cart}</span>
             </button>
 
@@ -833,8 +1017,13 @@ export default function HomePage() {
               <div className="bg-white rounded-2xl border border-gray-200 p-4 sticky top-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">{t.bigCategory}</p>
-                    <h3 className="text-lg font-bold">{translatedBigCategoryName}</h3>
+                    <p className="text-xs text-gray-500 mb-1">
+                      {t.bigCategory}
+                    </p>
+
+                    <h3 className="text-lg font-bold">
+                      {translatedBigCategoryName}
+                    </h3>
                   </div>
 
                   <button
@@ -991,6 +1180,7 @@ export default function HomePage() {
 
                         <div className="mt-2 flex items-center gap-2">
                           <StarRating rating={Number(product.avgRating || 0)} />
+
                           <span className="text-xs text-gray-500">
                             {Number(product.avgRating || 0).toFixed(1)}
                           </span>
@@ -1001,6 +1191,7 @@ export default function HomePage() {
                             <p className="font-bold text-lg">
                               {Number(product.price || 0).toLocaleString()}원
                             </p>
+
                             <p className="text-xs text-gray-500">
                               {t.stock} {product.stock ?? 0} · {t.sales}{" "}
                               {product.salesCount ?? 0}
