@@ -27,9 +27,6 @@ type SortType =
   | "ratingDesc"
   | "salesDesc";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
-
 const TRANSLATION_CACHE_KEY = "sewon_translation_cache_v1";
 
 const BIG_CATEGORY_TREE: Record<string, string[]> = {
@@ -304,11 +301,11 @@ export default function HomePage() {
     }
 
     if (url.startsWith("/uploads/")) {
-      return `${API_BASE_URL}${url}`;
+      return url;
     }
 
     if (url.startsWith("uploads/")) {
-      return `${API_BASE_URL}/${url}`;
+      return `/${url}`;
     }
 
     if (url.startsWith("/images/")) {
@@ -320,10 +317,10 @@ export default function HomePage() {
     }
 
     if (url.startsWith("/")) {
-      return `${API_BASE_URL}${url}`;
+      return url;
     }
 
-    return `${API_BASE_URL}/${url}`;
+    return `/${url}`;
   };
 
   const getThumbnailSrc = (product: any) => {
@@ -332,34 +329,28 @@ export default function HomePage() {
       ? [...product.productImages]
       : [];
 
-    const sortedImages = images.sort((a: any, b: any) => {
-      if (a?.isMain && !b?.isMain) return -1;
-      if (!a?.isMain && b?.isMain) return 1;
+    const sortImageList = (list: any[]) => {
+      return [...list].sort((a: any, b: any) => {
+        if (a?.isMain && !b?.isMain) return -1;
+        if (!a?.isMain && b?.isMain) return 1;
 
-      const sortA = Number(a?.sortOrder ?? 0);
-      const sortB = Number(b?.sortOrder ?? 0);
+        const sortA = Number(a?.sortOrder ?? 0);
+        const sortB = Number(b?.sortOrder ?? 0);
 
-      if (sortA !== sortB) return sortA - sortB;
-      return Number(a?.id ?? 0) - Number(b?.id ?? 0);
-    });
+        if (sortA !== sortB) return sortA - sortB;
+        return Number(a?.id ?? 0) - Number(b?.id ?? 0);
+      });
+    };
 
-    const sortedProductImages = productImages.sort((a: any, b: any) => {
-      if (a?.isMain && !b?.isMain) return -1;
-      if (!a?.isMain && b?.isMain) return 1;
-
-      const sortA = Number(a?.sortOrder ?? 0);
-      const sortB = Number(b?.sortOrder ?? 0);
-
-      if (sortA !== sortB) return sortA - sortB;
-      return Number(a?.id ?? 0) - Number(b?.id ?? 0);
-    });
+    const sortedImages = sortImageList(images);
+    const sortedProductImages = sortImageList(productImages);
 
     const raw =
+      product?.imageUrl ||
       sortedImages.find((img: any) => img?.isMain)?.imageUrl ||
       sortedImages[0]?.imageUrl ||
       sortedProductImages.find((img: any) => img?.isMain)?.imageUrl ||
       sortedProductImages[0]?.imageUrl ||
-      product?.imageUrl ||
       "";
 
     return normalizeImageUrl(raw);
