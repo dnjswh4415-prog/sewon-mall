@@ -27,7 +27,7 @@ type SortType =
   | "ratingDesc"
   | "salesDesc";
 
-const API_BASE_URL = "http://129.154.50.160";
+const API_BASE_URL = "http://localhost:5000";
 const TRANSLATION_CACHE_KEY = "sewon_translation_cache_v1";
 
 /**
@@ -41,7 +41,7 @@ const BIG_CATEGORY_TREE: Record<string, string[]> = {
   "가구/생활": ["의자", "책상", "조명", "생활가전"],
   PC부품: ["저장장치", "CPU", "메인보드", "그래픽카드", "RAM", "SSD", "케이스", "쿨러"],
   "사무/네트워크": ["프린터", "공유기"],
- "스마트홈/보안": ["스마트도어락", "홈CCTV", "스마트조명", "스마트플러그", "로봇청소기"],
+  "스마트홈/보안": ["스마트도어락", "홈CCTV", "스마트조명", "스마트플러그", "로봇청소기"],
   차량용품: ["블랙박스", "차량충전기", "차량거치대", "차량청소기", "차량공기청정기"],
 };
 
@@ -59,10 +59,10 @@ const BIG_CATEGORY_LABELS: Record<
   "가구/생활": { ko: "가구/생활", ja: "家具/生活" },
   PC부품: { ko: "PC부품", ja: "PCパーツ" },
   "사무/네트워크": { ko: "사무/네트워크", ja: "事務/ネットワーク" },
- // 새로 추가
- "스마트홈/보안": { ko: "스마트홈/보안", ja: "スマートホーム/セキュリティ" },
+  "스마트홈/보안": { ko: "스마트홈/보안", ja: "スマートホーム/セキュリティ" },
   차량용품: { ko: "차량용품", ja: "カー用品" },
 };
+
 const uiText = {
   ko: {
     favorite: "즐겨찾기",
@@ -379,6 +379,12 @@ export default function HomePage() {
   }, [categories, selectedBigCategory]);
 
   const filteredProducts = useMemo(() => {
+    const isSearchMode = search.trim().length > 0;
+
+    if (isSearchMode) {
+      return products;
+    }
+
     const targetSubCategoryNames = new Set(
       BIG_CATEGORY_TREE[selectedBigCategory] ?? []
     );
@@ -399,7 +405,7 @@ export default function HomePage() {
 
       return matchesBigCategory && matchesSubCategory;
     });
-  }, [products, selectedBigCategory, selectedSubCategoryId]);
+  }, [products, search, selectedBigCategory, selectedSubCategoryId]);
 
   const sortedProducts = useMemo(() => {
     const copied = [...filteredProducts];
@@ -593,18 +599,25 @@ export default function HomePage() {
   };
 
   const handleSearch = () => {
-    setSearch(searchInput.trim());
+    const keyword = searchInput.trim();
+
+    setSearch(keyword);
+    setSelectedSubCategoryId(null);
     setPage(1);
   };
 
   const handleBigCategoryClick = (bigCategory: string) => {
     setSelectedBigCategory(bigCategory);
     setSelectedSubCategoryId(null);
+    setSearch("");
+    setSearchInput("");
     setPage(1);
   };
 
   const handleSubCategoryClick = (id: number | null) => {
     setSelectedSubCategoryId(id);
+    setSearch("");
+    setSearchInput("");
     setPage(1);
   };
 
@@ -639,7 +652,9 @@ export default function HomePage() {
       : selectedSubCategoryName;
 
   const currentCategoryLabel =
-    selectedSubCategoryId == null
+    search.trim().length > 0
+      ? `${t.searchKeyword}: ${search}`
+      : selectedSubCategoryId == null
       ? `${translatedBigCategoryName}`
       : language === "ja"
       ? translatedSelectedSubCategoryName || translatedBigCategoryName
@@ -797,7 +812,6 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* 상단 큰 카테고리 */}
       <section className="bg-white border-y border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap gap-2">
           {bigCategories.map((bigCategory) => {
@@ -893,12 +907,6 @@ export default function HomePage() {
                 <div>
                   <p className="text-sm text-gray-500">{t.selectedCategory}</p>
                   <h3 className="text-2xl font-bold">{currentCategoryLabel}</h3>
-                  {search && (
-                    <p className="text-sm text-gray-500 mt-1">
-                      {t.searchKeyword}:{" "}
-                      <span className="font-medium">{search}</span>
-                    </p>
-                  )}
                 </div>
 
                 <select
