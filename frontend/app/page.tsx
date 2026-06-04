@@ -27,12 +27,11 @@ type SortType =
   | "ratingDesc"
   | "salesDesc";
 
-const API_BASE_URL = "http://localhost:5000";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
+
 const TRANSLATION_CACHE_KEY = "sewon_translation_cache_v1";
 
-/**
- * 여기 이름은 DB category.name과 맞춰줘야 정상 동작함
- */
 const BIG_CATEGORY_TREE: Record<string, string[]> = {
   입력장치: ["키보드", "마우스", "웹캠", "마이크", "게이밍액세서리"],
   오디오: ["헤드셋", "이어폰", "스피커"],
@@ -41,17 +40,11 @@ const BIG_CATEGORY_TREE: Record<string, string[]> = {
   "가구/생활": ["의자", "책상", "조명", "생활가전"],
   PC부품: ["저장장치", "CPU", "메인보드", "그래픽카드", "RAM", "SSD", "케이스", "쿨러"],
   "사무/네트워크": ["프린터", "공유기"],
- "스마트홈/보안": ["스마트도어락", "홈CCTV", "스마트조명", "스마트플러그", "로봇청소기"],
+  "스마트홈/보안": ["스마트도어락", "홈CCTV", "스마트조명", "스마트플러그", "로봇청소기"],
   차량용품: ["블랙박스", "차량충전기", "차량거치대", "차량청소기", "차량공기청정기"],
 };
 
-const BIG_CATEGORY_LABELS: Record<
-  string,
-  {
-    ko: string;
-    ja: string;
-  }
-> = {
+const BIG_CATEGORY_LABELS: Record<string, { ko: string; ja: string }> = {
   입력장치: { ko: "입력장치", ja: "入力機器" },
   오디오: { ko: "오디오", ja: "オーディオ" },
   "디스플레이/모바일": { ko: "디스플레이/모바일", ja: "ディスプレイ/モバイル" },
@@ -59,10 +52,10 @@ const BIG_CATEGORY_LABELS: Record<
   "가구/생활": { ko: "가구/생활", ja: "家具/生活" },
   PC부품: { ko: "PC부품", ja: "PCパーツ" },
   "사무/네트워크": { ko: "사무/네트워크", ja: "事務/ネットワーク" },
- // 새로 추가
- "스마트홈/보안": { ko: "스마트홈/보안", ja: "スマートホーム/セキュリティ" },
+  "스마트홈/보안": { ko: "스마트홈/보안", ja: "スマートホーム/セキュリティ" },
   차량용품: { ko: "차량용품", ja: "カー用品" },
 };
+
 const uiText = {
   ko: {
     favorite: "즐겨찾기",
@@ -379,6 +372,12 @@ export default function HomePage() {
   }, [categories, selectedBigCategory]);
 
   const filteredProducts = useMemo(() => {
+    const hasSearch = search.trim().length > 0;
+
+    if (hasSearch) {
+      return products;
+    }
+
     const targetSubCategoryNames = new Set(
       BIG_CATEGORY_TREE[selectedBigCategory] ?? []
     );
@@ -399,7 +398,7 @@ export default function HomePage() {
 
       return matchesBigCategory && matchesSubCategory;
     });
-  }, [products, selectedBigCategory, selectedSubCategoryId]);
+  }, [products, search, selectedBigCategory, selectedSubCategoryId]);
 
   const sortedProducts = useMemo(() => {
     const copied = [...filteredProducts];
@@ -592,6 +591,10 @@ export default function HomePage() {
     }
   };
 
+  const handleLogoClick = () => {
+    window.location.href = "/";
+  };
+
   const handleSearch = () => {
     setSearch(searchInput.trim());
     setPage(1);
@@ -639,7 +642,9 @@ export default function HomePage() {
       : selectedSubCategoryName;
 
   const currentCategoryLabel =
-    selectedSubCategoryId == null
+    search.trim().length > 0
+      ? `${t.searchKeyword}: ${search}`
+      : selectedSubCategoryId == null
       ? `${translatedBigCategoryName}`
       : language === "ja"
       ? translatedSelectedSubCategoryName || translatedBigCategoryName
@@ -656,6 +661,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-[#f7f7f7] text-gray-900">
       <MainPopupBanner />
+
       <div className="bg-[#f1f1f1] border-b border-gray-200">
         <div className="max-w-7xl mx-auto h-10 px-4 flex items-center justify-between text-sm text-gray-600">
           <div className="flex items-center gap-5">
@@ -734,7 +740,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 h-[142px] flex items-center justify-between gap-8">
           <div className="w-[260px] shrink-0">
             <h1
-              onClick={() => router.push("/")}
+              onClick={handleLogoClick}
               className="text-[42px] leading-none font-extrabold tracking-[-0.03em] cursor-pointer text-black"
             >
               sewon-mall
@@ -797,7 +803,6 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* 상단 큰 카테고리 */}
       <section className="bg-white border-y border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap gap-2">
           {bigCategories.map((bigCategory) => {
@@ -876,42 +881,42 @@ export default function HomePage() {
             </aside>
           )}
 
-          <section className="flex-1 min-w-0">
+          <section className="flex-1">
             {!showCategoryPanel && (
-              <div className="mb-4">
-                <button
-                  onClick={() => setShowCategoryPanel(true)}
-                  className="px-4 py-2 bg-white border border-gray-300 rounded-xl hover:bg-gray-50"
-                >
-                  {t.openCategory}
-                </button>
-              </div>
+              <button
+                onClick={() => setShowCategoryPanel(true)}
+                className="mb-4 px-4 py-2 rounded-xl bg-white border border-gray-200 text-sm"
+              >
+                {t.openCategory}
+              </button>
             )}
 
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">{t.selectedCategory}</p>
-                  <h3 className="text-2xl font-bold">{currentCategoryLabel}</h3>
-                  {search && (
-                    <p className="text-sm text-gray-500 mt-1">
-                      {t.searchKeyword}:{" "}
-                      <span className="font-medium">{search}</span>
-                    </p>
-                  )}
-                </div>
+            <div className="mb-5 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+              <div>
+                <p className="text-sm text-gray-500">{t.selectedCategory}</p>
+                <h2 className="text-2xl font-bold">{currentCategoryLabel}</h2>
+              </div>
 
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as SortType)}
-                  className="border border-gray-300 rounded-xl px-4 py-3 bg-white"
-                >
-                  <option value="latest">{t.latest}</option>
-                  <option value="priceAsc">{t.priceAsc}</option>
-                  <option value="priceDesc">{t.priceDesc}</option>
-                  <option value="salesDesc">{t.salesDesc}</option>
-                  <option value="ratingDesc">{t.ratingDesc}</option>
-                </select>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { key: "latest", label: t.latest },
+                  { key: "priceAsc", label: t.priceAsc },
+                  { key: "priceDesc", label: t.priceDesc },
+                  { key: "salesDesc", label: t.salesDesc },
+                  { key: "ratingDesc", label: t.ratingDesc },
+                ].map((item) => (
+                  <button
+                    key={item.key}
+                    onClick={() => setSortBy(item.key as SortType)}
+                    className={`px-4 py-2 rounded-xl text-sm border ${
+                      sortBy === item.key
+                        ? "bg-black text-white border-black"
+                        : "bg-white border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -924,96 +929,82 @@ export default function HomePage() {
                 {t.emptyProducts}
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
                 {pagedProducts.map((product) => {
-                  const isSoldOut = Number(product.stock) === 0;
-                  const thumbnail = getThumbnailSrc(product);
-                  const translatedName =
+                  const wished = wishlistIds.includes(product.id);
+                  const productName =
                     language === "ja"
                       ? translatedNames[product.id] || product.name
                       : product.name;
 
-                  const productCategoryName =
-                    language === "ja"
-                      ? translatedCategoryNames[product.Category?.id] ||
-                        product.Category?.name ||
-                        translatedBigCategoryName
-                      : product.Category?.name || selectedBigCategory;
-
                   return (
                     <div
                       key={product.id}
-                      onClick={() => router.push(`/products/${product.id}`)}
-                      className="group relative bg-white rounded-2xl border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden"
+                      className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-md transition group"
                     >
-                      {isSoldOut && (
-                        <div className="absolute inset-0 bg-black/55 flex items-center justify-center z-20">
-                          <span className="text-white text-lg font-bold">
-                            {t.soldOut}
-                          </span>
-                        </div>
-                      )}
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleWishlist(product.id);
-                        }}
-                        className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-white/90 border border-gray-200 flex items-center justify-center hover:bg-white"
+                      <div
+                        onClick={() => router.push(`/products/${product.id}`)}
+                        className="relative aspect-square bg-gray-100 cursor-pointer"
                       >
-                        <Heart
-                          size={18}
-                          className={
-                            wishlistIds.includes(product.id)
-                              ? "fill-red-500 text-red-500"
-                              : "text-gray-400"
-                          }
-                        />
-                      </button>
-
-                      <div className="aspect-square bg-[#f1f1f1] overflow-hidden">
                         <img
-                          src={thumbnail}
+                          src={getThumbnailSrc(product)}
                           alt={product.name}
-                          className="block h-full w-full object-cover"
+                          className="w-full h-full object-cover group-hover:scale-105 transition"
                           onError={(e) => {
-                            const target = e.currentTarget;
-                            if (!target.src.endsWith("/no-image.png")) {
-                              target.src = "/no-image.png";
-                            }
+                            e.currentTarget.src = "/no-image.png";
                           }}
                         />
+
+                        {Number(product.stock || 0) <= 0 && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-bold">
+                            {t.soldOut}
+                          </div>
+                        )}
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleWishlist(product.id);
+                          }}
+                          className={`absolute top-3 right-3 w-10 h-10 rounded-full flex items-center justify-center shadow ${
+                            wished
+                              ? "bg-red-500 text-white"
+                              : "bg-white text-gray-600"
+                          }`}
+                        >
+                          <Heart
+                            size={20}
+                            fill={wished ? "currentColor" : "none"}
+                          />
+                        </button>
                       </div>
 
                       <div className="p-4">
-                        <div className="mb-2">
-                          <p className="text-xs text-gray-500 mb-1">
-                            {productCategoryName}
-                          </p>
-                          <h5 className="font-semibold text-sm leading-5 line-clamp-2 min-h-[40px]">
-                            {translatedName}
-                          </h5>
-                        </div>
+                        <button
+                          onClick={() => router.push(`/products/${product.id}`)}
+                          className="text-left w-full"
+                        >
+                          <h3 className="font-semibold line-clamp-2 min-h-[48px]">
+                            {productName}
+                          </h3>
+                        </button>
 
-                        <div className="flex items-center gap-2 mb-3">
-                          <StarRating rating={product.avgRating || 0} />
+                        <div className="mt-2 flex items-center gap-2">
+                          <StarRating rating={Number(product.avgRating || 0)} />
                           <span className="text-xs text-gray-500">
-                            ({product.reviewCount || 0})
+                            {Number(product.avgRating || 0).toFixed(1)}
                           </span>
                         </div>
 
-                        <div className="space-y-1">
-                          <p className="text-lg font-bold">
-                            {Number(product.price).toLocaleString()}원
-                          </p>
-
-                          <div className="flex items-center justify-between text-xs text-gray-500">
-                            <span>
-                              {t.stock} {product.stock ?? 0}
-                            </span>
-                            <span>
-                              {t.sales} {product.salesCount || 0}
-                            </span>
+                        <div className="mt-3 flex items-end justify-between gap-2">
+                          <div>
+                            <p className="font-bold text-lg">
+                              {Number(product.price || 0).toLocaleString()}원
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {t.stock} {product.stock ?? 0} · {t.sales}{" "}
+                              {product.salesCount ?? 0}
+                            </p>
                           </div>
                         </div>
                       </div>
