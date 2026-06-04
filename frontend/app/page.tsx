@@ -92,6 +92,27 @@ const BIG_CATEGORY_LABELS: Record<string, { ko: string; ja: string }> = {
   차량용품: { ko: "차량용품", ja: "カー用品" },
 };
 
+const BIG_CATEGORY_ALIASES: Record<string, string[]> = {
+  입력장치: ["입력장치", "입력", "키보드", "마우스", "게이밍기기"],
+  오디오: ["오디오", "음향", "소리", "사운드", "헤드셋", "이어폰", "스피커"],
+  "디스플레이/모바일": [
+    "디스플레이",
+    "모바일",
+    "핸드폰",
+    "휴대폰",
+    "스마트폰",
+    "모니터",
+    "노트북",
+    "태블릿",
+  ],
+  "전원/케이블": ["전원", "케이블", "충전", "충전기", "보조배터리"],
+  "가구/생활": ["가구", "생활", "생활용품", "의자", "책상", "조명"],
+  PC부품: ["pc부품", "피씨부품", "컴퓨터부품", "컴퓨터", "부품"],
+  "사무/네트워크": ["사무", "네트워크", "인터넷", "공유기", "프린터"],
+  "스마트홈/보안": ["스마트홈", "보안", "cctv", "홈보안"],
+  차량용품: ["차량용품", "차량용", "차량", "자동차", "카용품", "차량기기"],
+};
+
 const uiText = {
   ko: {
     favorite: "즐겨찾기",
@@ -354,9 +375,7 @@ export default function HomePage() {
   const findCategoryBySearchKeyword = (keyword: string) => {
     const normalizedKeyword = normalizeSearchText(keyword);
 
-    if (!normalizedKeyword) {
-      return null;
-    }
+    if (!normalizedKeyword) return null;
 
     for (const bigCategory of bigCategories) {
       const normalizedBigCategory = normalizeSearchText(bigCategory);
@@ -366,6 +385,7 @@ export default function HomePage() {
       const bigCategoryLabelJa = normalizeSearchText(
         BIG_CATEGORY_LABELS[bigCategory]?.ja || ""
       );
+      const aliases = BIG_CATEGORY_ALIASES[bigCategory] || [];
 
       const isBigCategoryMatched =
         normalizedBigCategory.includes(normalizedKeyword) ||
@@ -373,11 +393,18 @@ export default function HomePage() {
         bigCategoryLabelKo.includes(normalizedKeyword) ||
         normalizedKeyword.includes(bigCategoryLabelKo) ||
         bigCategoryLabelJa.includes(normalizedKeyword) ||
-        normalizedKeyword.includes(bigCategoryLabelJa);
+        normalizedKeyword.includes(bigCategoryLabelJa) ||
+        aliases.some((alias) => {
+          const normalizedAlias = normalizeSearchText(alias);
+
+          return (
+            normalizedAlias.includes(normalizedKeyword) ||
+            normalizedKeyword.includes(normalizedAlias)
+          );
+        });
 
       if (isBigCategoryMatched) {
         return {
-          type: "big" as const,
           bigCategory,
           subCategoryId: null,
         };
@@ -398,7 +425,6 @@ export default function HomePage() {
           );
 
           return {
-            type: "sub" as const,
             bigCategory,
             subCategoryId: matchedDbCategory
               ? Number(matchedDbCategory.id)
@@ -419,7 +445,6 @@ export default function HomePage() {
 
       if (matchedDbCategory) {
         return {
-          type: "sub" as const,
           bigCategory,
           subCategoryId: Number(matchedDbCategory.id),
         };
@@ -526,9 +551,9 @@ export default function HomePage() {
   }, [categories, selectedBigCategory]);
 
   const filteredProducts = useMemo(() => {
-    const hasSearch = search.trim().length > 0;
+    const isSearchMode = search.trim().length > 0;
 
-    if (hasSearch) {
+    if (isSearchMode) {
       return products;
     }
 
@@ -540,6 +565,7 @@ export default function HomePage() {
       const productCategoryId = Number(
         product?.Category?.id ?? product?.category?.id ?? 0
       );
+
       const productCategoryName =
         product?.Category?.name || product?.category?.name || "";
 
