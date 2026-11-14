@@ -21,6 +21,7 @@ import { AdminModule } from './admin/admin.module';
 import { TranslateModule } from './translate/translate.module';
 import { PayPayModule } from './paypay/paypay.module';
 import { ExchangeRateModule } from './exchange-rate/exchange-rate.module';
+import { NoticeModule } from './notice/notice.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { ExchangeRateModule } from './exchange-rate/exchange-rate.module';
     TranslateModule,
     PayPayModule,
     ExchangeRateModule,
+    NoticeModule,
   ],
   controllers: [AppController],
   providers: [

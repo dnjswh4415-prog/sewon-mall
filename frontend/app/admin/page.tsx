@@ -137,6 +137,12 @@ export default function AdminPage() {
           >
             재고 관리
           </Link>
+          <Link
+            href="/admin/notices"
+            className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium"
+          >
+            공지사항 관리
+          </Link>
           <PageTopActions backFallbackHref="/" />
         </div>
       </div>

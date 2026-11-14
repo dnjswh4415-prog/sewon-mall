@@ -72,7 +72,6 @@ const uiText = {
     wishlist: "찜목록",
     admin: "관리자페이지",
     logout: "로그아웃",
-    inquiry: "1:1문의",
     support: "고객센터",
     cart: "장바구니",
     orders: "주문/배송",
@@ -115,7 +114,6 @@ const uiText = {
     wishlist: "お気に入り一覧",
     admin: "管理者ページ",
     logout: "ログアウト",
-    inquiry: "1:1お問い合わせ",
     support: "カスタマーセンター",
     cart: "カート",
     orders: "注文/配送",
@@ -732,8 +730,7 @@ export default function HomePage() {
           </div>
 
           <div className="flex items-center gap-5">
-            <button className="hover:text-black">{t.inquiry}</button>
-            <button className="hover:text-black">{t.support}</button>
+            <button onClick={() => router.push("/support")} className="hover:text-black">{t.support}</button>
             <button
               onClick={handleToggleLanguage}
               disabled={pageTranslating}
