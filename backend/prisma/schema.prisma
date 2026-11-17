@@ -550,3 +550,21 @@ enum CurrencyCode {
   KRW
   JPY
 }
+
+//////////////////////////////////////////////////
+// NOTICE
+// 고객센터 공지사항
+//////////////////////////////////////////////////
+
+model Notice {
+  id          Int      @id @default(autoincrement())
+  title       String   @db.VarChar(200)
+  content     String   @db.Text
+  category    String   @default("공지사항") @db.VarChar(30)
+  isPinned    Boolean  @default(false)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isPublished, isPinned, createdAt])
+}
